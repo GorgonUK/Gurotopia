@@ -1,7 +1,6 @@
 #include "pch.hpp"
 #include "on/RequestWorldSelectMenu.hpp"
 #include "on/ConsoleMessage.hpp"
-#include "tools/logger.hpp"
 #include "quit_to_exit.hpp"
 
 void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip_selection = false) 
@@ -10,8 +9,6 @@ void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip
 
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return; // @note peer was not in a world, therefore nothing to exit from.
-
-    log_event("world_leave", std::format("{}({})", pPeer->growid, pPeer->user_id), world->name, "quit_to_exit");
 
     std::string &prefix = pPeer->prefix;
     std::string message = std::format("`5<`{}{}`` left, `w{}`` others here>``", prefix, pPeer->growid, world->visitors-1);

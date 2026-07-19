@@ -1,6 +1,5 @@
 #include "pch.hpp"
 #include "automate/holiday.hpp"
-#include "tools/logger.hpp"
 
 #include "tankIDName.hpp"
 
@@ -23,8 +22,6 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
     // it again here (before enter_game grants the starter kit).
     if (!pPeer->mysql_load_progress())
         fprintf(stderr, "[peer] failed to load progress for %s\n", pPeer->growid.c_str());
-
-    log_event("login", std::format("{}({})", pPeer->growid, pPeer->user_id), "", "session start");
 
     send_varlist(event.peer, { "OnOverrideGDPRFromServer", 18, 1, 0, 1 });
 

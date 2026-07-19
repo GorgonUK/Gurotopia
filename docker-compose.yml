@@ -33,7 +33,6 @@ services:
       - ./deploy/server_data.php:/app/server_data.php:ro
       - ./deploy/items.dat:/app/items.dat:ro
       - ./resources:/app/resources:ro
-      - ./logs:/app/logs
     environment:
       LD_LIBRARY_PATH: /app/include/mysql/lib:/app/include/enet/lib
 

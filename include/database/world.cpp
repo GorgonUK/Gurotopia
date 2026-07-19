@@ -595,13 +595,7 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
             data[pos++] = world.lock_state;
             *reinterpret_cast<int*>(&data[pos]) = world.owner; pos += sizeof(int);
             *reinterpret_cast<int*>(&data[pos]) = access; pos += sizeof(int);
-            *reinterpret_cast<int*>(&data[pos]) = 0; pos += sizeof(int); // @note unknown / settings padding used by client
-            for (int uid : world.access)
-                if (uid)
-                {
-                    *reinterpret_cast<int*>(&data[pos]) = uid;
-                    pos += sizeof(int);
-                }
+            /* @todo access list */
             break;
         }
         case type::DOOR:
@@ -660,7 +654,7 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [&](ENetPeer& p) 
     {
-        send_data(p, std::vector<u_char>(data)); // @note copy — move would empty the buffer after the first peer
+        send_data(p, std::move(data));
     });
 }
 
