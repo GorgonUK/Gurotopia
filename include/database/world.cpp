@@ -713,13 +713,7 @@ void generate_world(::world &world, const std::string& name)
     for (std::size_t i = 0ull; i < blocks.size(); ++i)
     {
         ::block &block = blocks[i];
-        if (i < cord(0, 37))
-        {
-            // @note non-zero sky background suppresses the mobile client's empty-sky ad banner.
-            // Cave Background (14) is a known-safe tile id; swap for a nicer bg later if desired.
-            block.bg = 14;
-        }
-        else if (i >= cord(0, 37))
+        if (i >= cord(0, 37))
         {
             block.bg = 14; // @note cave background
             if (i >= cord(0, 38) && i < cord(0, 50) /* (above) lava level */ && ransuu[{0, 38}] <= 1) block.fg = 10; // rock
