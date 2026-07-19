@@ -2,6 +2,8 @@
 
 #include <ctime>
 
+class peer;
+
 enum wstate3 : u_char
 {
     S_RIGHT =  0x00,
@@ -100,6 +102,30 @@ struct magplant
     static constexpr u_short CAPACITY = 5000;
 };
 
+/* chemical combiner (E-Z Cook Oven, Laboratory, ...) — items swallowed while closed */
+struct combiner
+{
+    combiner(::pos _pos = {}) : pos(_pos) {}
+
+    ::pos pos{};
+    std::vector<::slot> contents{};
+    bool output_ready{}; // @note open oven is holding crafted/returned drops to collect
+};
+
+/* Small/Big/Huge/Builder lock — claims a flood-filled area of tiles */
+struct tile_lock
+{
+    tile_lock(::pos _pos = {}, u_short _lock_id = 0, int _owner = 0, bool _is_public = false) :
+        pos(_pos), lock_id(_lock_id), owner(_owner), is_public(_is_public) {}
+
+    ::pos pos{};
+    u_short lock_id{};
+    int owner{};
+    std::array<int, 20> access{};
+    bool is_public{};
+    std::vector<::pos> area{}; // @note claimed tiles (includes lock tile)
+};
+
 struct random_block
 {
     random_block(u_char _value, ::pos _pos) : value(_value), pos(_pos) {}
@@ -154,6 +180,8 @@ public:
     std::vector<::display> displays{};
     std::vector<::vending> vendings{};
     std::vector<::magplant> magplants{};
+    std::vector<::combiner> combiners{};
+    std::vector<::tile_lock> tile_locks{};
     std::vector<::random_block> random_blocks{};
     std::vector<::letter> letters{}; // @note mailbox/bulletin/donation tile contents
 
@@ -163,6 +191,23 @@ public:
     void mark_dirty() { dirty = true; }
 };
 extern std::vector<world> worlds;
+
+/* how many tiles a tile lock claims (Small=10, Big=48, Huge/Builder=200) */
+extern int tile_lock_capacity(u_short lock_id);
+
+/* flood-fill claim around lock_pos; returns claimed coords including the lock */
+extern std::vector<::pos> claim_tile_lock_area(::world &world, ::pos lock_pos, int capacity);
+
+/* tile lock covering this coordinate, or nullptr */
+extern ::tile_lock *tile_lock_at(::world &world, ::pos punch);
+extern const ::tile_lock *tile_lock_at(const ::world &world, ::pos punch);
+
+/* true if peer may build/break at punch under world + tile lock rules */
+extern bool peer_can_edit_tile(const ::peer *pPeer, const ::world &world, ::pos punch);
+
+/* place / remove a tile lock entry and refresh S_LOCKED flags on its area */
+extern void apply_tile_lock(::world &world, ::tile_lock &lock);
+extern void remove_tile_lock(::world &world, ::pos lock_pos);
 
 /* seconds elapsed since plant/provider tick (offline-safe) */
 extern int block_elapsed_seconds(std::time_t tick);
@@ -196,6 +241,8 @@ extern void item_change_object(ENetEvent& event, ::state state);
 
 extern void merge_object(ENetEvent& event, ::slot slot, const ::pos& pos, ::world &world);
 extern void remove_object(ENetEvent& event, signed uid);
+/* despawn a world drop without crediting it to the peer (unlike remove_object / pickup) */
+extern void despawn_object(ENetEvent& event, signed uid);
 extern int  add_object(ENetEvent& event, ::slot slot, const ::pos& pos, ::world &world);
 
 extern void add_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world);

@@ -6,6 +6,8 @@
 
 #include <cstring>
 #include <ctime>
+#include <deque>
+#include <unordered_set>
 
 #include "world.hpp"
 
@@ -15,13 +17,17 @@ using namespace std::literals::chrono_literals; // @note for 'ms' 's' (millisec,
 namespace
 {
     constexpr u_int WORLD_MAGIC = 0x44525747u; // 'GWRD'
-    constexpr u_short WORLD_VERSION = 3; // @note v3 appends vendings + magplants
+    constexpr u_short WORLD_VERSION = 5; // @note v5 appends combiners
+    constexpr std::size_t MAX_COMBINERS = 500ull;
+    constexpr std::size_t MAX_COMBINER_SLOTS = 100ull;
     constexpr std::size_t WORLD_BLOCKS = 100ull * 60ull;
     constexpr std::size_t MAX_OBJECTS = 10000ull;
     constexpr std::size_t MAX_DOORS = 1000ull;
     constexpr std::size_t MAX_DISPLAYS = 1000ull;
     constexpr std::size_t MAX_VENDINGS = 1000ull;
     constexpr std::size_t MAX_MAGPLANTS = 500ull;
+    constexpr std::size_t MAX_TILE_LOCKS = 500ull;
+    constexpr std::size_t MAX_TILE_LOCK_AREA = 256ull;
     constexpr std::size_t MAX_RANDOM = 1000ull;
     constexpr std::size_t MAX_LETTERS = 1000ull;
     constexpr std::size_t MAX_LABEL = 256ull;
@@ -94,7 +100,8 @@ namespace
             throw std::runtime_error("invalid block count");
         if (world.objects.size() > MAX_OBJECTS || world.doors.size() > MAX_DOORS ||
             world.displays.size() > MAX_DISPLAYS || world.vendings.size() > MAX_VENDINGS ||
-            world.magplants.size() > MAX_MAGPLANTS || world.random_blocks.size() > MAX_RANDOM)
+            world.magplants.size() > MAX_MAGPLANTS || world.tile_locks.size() > MAX_TILE_LOCKS ||
+            world.combiners.size() > MAX_COMBINERS || world.random_blocks.size() > MAX_RANDOM)
             throw std::runtime_error("world collection too large");
 
         ByteWriter w;
@@ -181,6 +188,37 @@ namespace
             w.write_u16(m.id);
             w.write_u16(m.count);
             w.write_u8(m.enabled ? 1 : 0);
+        }
+
+        w.write_u32(static_cast<u_int>(world.tile_locks.size()));
+        for (const ::tile_lock &tl : world.tile_locks)
+        {
+            w.write_f32(tl.pos.x);
+            w.write_f32(tl.pos.y);
+            w.write_u16(tl.lock_id);
+            w.write_i32(tl.owner);
+            w.write_u8(tl.is_public ? 1 : 0);
+            for (int uid : tl.access)
+                w.write_i32(uid);
+            w.write_u32(static_cast<u_int>(tl.area.size()));
+            for (const ::pos &p : tl.area)
+            {
+                w.write_f32(p.x);
+                w.write_f32(p.y);
+            }
+        }
+
+        w.write_u32(static_cast<u_int>(world.combiners.size()));
+        for (const ::combiner &c : world.combiners)
+        {
+            w.write_f32(c.pos.x);
+            w.write_f32(c.pos.y);
+            w.write_u32(static_cast<u_int>(c.contents.size()));
+            for (const ::slot &s : c.contents)
+            {
+                w.write_i16(s.id);
+                w.write_i16(s.count);
+            }
         }
 
         return w.buf;
@@ -320,9 +358,201 @@ namespace
             }
         }
 
+        world.tile_locks.clear();
+        if (version >= 4)
+        {
+            u_int lock_count = r.read_u32();
+            if (lock_count > MAX_TILE_LOCKS)
+                throw std::runtime_error("too many tile locks");
+            for (u_int i = 0; i < lock_count; ++i)
+            {
+                float x = r.read_f32();
+                float y = r.read_f32();
+                u_short lock_id = r.read_u16();
+                int owner = r.read_i32();
+                bool is_public = r.read_u8() != 0;
+                ::tile_lock tl(::pos{x, y}, lock_id, owner, is_public);
+                for (int &uid : tl.access)
+                    uid = r.read_i32();
+                u_int area_count = r.read_u32();
+                if (area_count > MAX_TILE_LOCK_AREA)
+                    throw std::runtime_error("tile lock area too large");
+                tl.area.reserve(area_count);
+                for (u_int a = 0; a < area_count; ++a)
+                {
+                    float ax = r.read_f32();
+                    float ay = r.read_f32();
+                    tl.area.emplace_back(ax, ay);
+                }
+                world.tile_locks.push_back(std::move(tl));
+            }
+        }
+
+        world.combiners.clear();
+        if (version >= 5)
+        {
+            u_int combiner_count = r.read_u32();
+            if (combiner_count > MAX_COMBINERS)
+                throw std::runtime_error("too many combiners");
+            for (u_int i = 0; i < combiner_count; ++i)
+            {
+                float x = r.read_f32();
+                float y = r.read_f32();
+                ::combiner c(::pos{x, y});
+                u_int slot_count = r.read_u32();
+                if (slot_count > MAX_COMBINER_SLOTS)
+                    throw std::runtime_error("combiner holds too many stacks");
+                c.contents.reserve(slot_count);
+                for (u_int s = 0; s < slot_count; ++s)
+                {
+                    short id = r.read_i16();
+                    short count = r.read_i16();
+                    c.contents.emplace_back(id, count);
+                }
+                world.combiners.push_back(std::move(c));
+            }
+        }
+
         if (r.pos != r.size)
             throw std::runtime_error("trailing world blob data");
     }
+}
+
+int tile_lock_capacity(u_short lock_id)
+{
+    switch (lock_id)
+    {
+        case 202: return 10;   // Small Lock
+        case 204: return 48;   // Big Lock
+        case 206: return 200;  // Huge Lock
+        case 4994: return 200; // Builder's Lock
+        default: return 10;
+    }
+}
+
+std::vector<::pos> claim_tile_lock_area(::world &world, ::pos lock_pos, int capacity)
+{
+    std::vector<::pos> claimed;
+    claimed.reserve(static_cast<std::size_t>(std::max(1, capacity)));
+    claimed.push_back(lock_pos);
+
+    if (capacity <= 1) return claimed;
+
+    std::deque<::pos> queue;
+    std::unordered_set<int> visited;
+    visited.insert(cord(lock_pos.x_int(), lock_pos.y_int()));
+
+    auto try_push = [&](int x, int y)
+    {
+        if (x < 0 || y < 0 || x >= 100 || y >= 60) return;
+        const int idx = cord(x, y);
+        if (!visited.insert(idx).second) return;
+
+        // skip tiles already claimed by another tile lock
+        if (tile_lock_at(world, ::pos{x, y}) != nullptr) return;
+
+        const ::block &b = world.blocks[idx];
+        // don't expand through bedrock / main door (keeps claims local)
+        const ::item &fg = id_to_item(b.fg);
+        if (fg.type == type::STRONG || fg.type == type::MAIN_DOOR) return;
+
+        queue.emplace_back(x, y);
+    };
+
+    try_push(lock_pos.x_int() - 1, lock_pos.y_int());
+    try_push(lock_pos.x_int() + 1, lock_pos.y_int());
+    try_push(lock_pos.x_int(), lock_pos.y_int() - 1);
+    try_push(lock_pos.x_int(), lock_pos.y_int() + 1);
+
+    while (!queue.empty() && static_cast<int>(claimed.size()) < capacity)
+    {
+        ::pos cur = queue.front();
+        queue.pop_front();
+        claimed.push_back(cur);
+
+        try_push(cur.x_int() - 1, cur.y_int());
+        try_push(cur.x_int() + 1, cur.y_int());
+        try_push(cur.x_int(), cur.y_int() - 1);
+        try_push(cur.x_int(), cur.y_int() + 1);
+    }
+
+    return claimed;
+}
+
+::tile_lock *tile_lock_at(::world &world, ::pos punch)
+{
+    for (::tile_lock &tl : world.tile_locks)
+        if (std::ranges::find(tl.area, punch) != tl.area.end() || tl.pos == punch)
+            return &tl;
+    return nullptr;
+}
+
+const ::tile_lock *tile_lock_at(const ::world &world, ::pos punch)
+{
+    for (const ::tile_lock &tl : world.tile_locks)
+        if (std::ranges::find(tl.area, punch) != tl.area.end() || tl.pos == punch)
+            return &tl;
+    return nullptr;
+}
+
+bool peer_can_edit_tile(const ::peer *pPeer, const ::world &world, ::pos punch)
+{
+    if (pPeer == nullptr) return false;
+    if (pPeer->role) return true;
+
+    // world lock gate (same as previous tile_change check)
+    if (world.owner && !world.is_public)
+    {
+        if (pPeer->user_id != world.owner &&
+            std::ranges::find(world.access, pPeer->user_id) == world.access.end())
+            return false;
+    }
+
+    const ::tile_lock *tl = tile_lock_at(world, punch);
+    if (tl == nullptr) return true;
+    if (tl->is_public) return true;
+    if (pPeer->user_id == tl->owner) return true;
+    if (std::ranges::find(tl->access, pPeer->user_id) != tl->access.end()) return true;
+    // world owner can always edit under their world lock
+    if (world.owner && pPeer->user_id == world.owner) return true;
+    return false;
+}
+
+void apply_tile_lock(::world &world, ::tile_lock &lock)
+{
+    for (const ::pos &p : lock.area)
+    {
+        if (p.x_int() < 0 || p.y_int() < 0 || p.x_int() >= 100 || p.y_int() >= 60) continue;
+        world.blocks[cord(p.x_int(), p.y_int())].state[2] |= S_LOCKED;
+    }
+    world.mark_dirty();
+}
+
+void remove_tile_lock(::world &world, ::pos lock_pos)
+{
+    auto it = std::ranges::find(world.tile_locks, lock_pos, &::tile_lock::pos);
+    if (it == world.tile_locks.end()) return;
+
+    for (const ::pos &p : it->area)
+    {
+        if (p.x_int() < 0 || p.y_int() < 0 || p.x_int() >= 100 || p.y_int() >= 60) continue;
+        // only clear if no other lock still covers this tile
+        ::pos check = p;
+        bool still = false;
+        for (const ::tile_lock &other : world.tile_locks)
+        {
+            if (other.pos == lock_pos) continue;
+            if (std::ranges::find(other.area, check) != other.area.end() || other.pos == check)
+            {
+                still = true;
+                break;
+            }
+        }
+        if (!still)
+            world.blocks[cord(p.x_int(), p.y_int())].state[2] &= ~S_LOCKED;
+    }
+    world.tile_locks.erase(it);
+    world.mark_dirty();
 }
 
 int block_elapsed_seconds(std::time_t tick)
@@ -629,6 +859,22 @@ void remove_object(ENetEvent& event, signed uid)
     });
 }
 
+void despawn_object(ENetEvent& event, signed uid)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+    auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
+    if (world != worlds.end())
+        world->mark_dirty();
+
+    // @note netid -1: client deletes the drop without treating it as a player pickup
+    item_change_object(event, ::state{
+        .netid = -1,
+        .uid   = (int)0xffffffff,
+        .id    = uid
+    });
+}
+
 int add_object(ENetEvent& event, ::slot slot, const ::pos& pos, ::world &world)
 {
     world.mark_dirty();
@@ -704,15 +950,29 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
     {
         case type::LOCK:
         {
-            if (!is_tile_lock(block.fg)) world.is_public = (block.state[2] & S_PUBLIC); // @note check if world lock has S_PUBLIC flag, i will change this later
+            if (!is_tile_lock(block.fg)) world.is_public = (block.state[2] & S_PUBLIC);
 
-            int access = std::ranges::count_if(world.access, std::identity{});
-            data.resize(data.size() + 1ull + 1ull + 4ull + 4ull + 4ull + (access * 4));
+            int lock_owner = world.owner;
+            int access_count = std::ranges::count_if(world.access, std::identity{});
+            u_char flags = world.lock_state;
+
+            if (is_tile_lock(block.fg))
+            {
+                auto tl = std::ranges::find(world.tile_locks, state.punch, &::tile_lock::pos);
+                if (tl != world.tile_locks.end())
+                {
+                    lock_owner = tl->owner;
+                    access_count = std::ranges::count_if(tl->access, std::identity{});
+                    flags = tl->is_public ? S_PUBLIC : 0;
+                }
+            }
+
+            data.resize(data.size() + 1ull + 1ull + 4ull + 4ull + 4ull + (access_count * 4));
 
             data[pos++] = 0x03;
-            data[pos++] = world.lock_state;
-            *reinterpret_cast<int*>(&data[pos]) = world.owner; pos += sizeof(int);
-            *reinterpret_cast<int*>(&data[pos]) = access; pos += sizeof(int);
+            data[pos++] = flags;
+            *reinterpret_cast<int*>(&data[pos]) = lock_owner; pos += sizeof(int);
+            *reinterpret_cast<int*>(&data[pos]) = access_count; pos += sizeof(int);
             /* @todo access list */
             break;
         }
@@ -881,22 +1141,41 @@ void fireworks(ENetEvent &event, const ::pos& pos)
 void generate_world(::world &world, const std::string& name)
 {
     ransuu ransuu;
-    u_short main_door = ransuu[{2, cord(0, 60) / 100 - 4}];
-    std::vector<::block> blocks(cord(0, 60), ::block{0, 0});
-    
+    // @note real GT: 100 wide × 60 tall; main door at y=24, bedrock under it at y=25,
+    // dirt/cave from y=25, lava near y=50–53, bottom 6 rows (y=54–59) are bedrock.
+    constexpr int WIDTH = 100;
+    constexpr int HEIGHT = 60;
+    constexpr int DOOR_Y = 24;
+    constexpr int SURFACE_Y = 25;
+    constexpr int ROCK_Y = 26;
+    constexpr int LAVA_Y = 50;
+    constexpr int BEDROCK_Y = 54;
+
+    const u_short main_door = static_cast<u_short>(ransuu[{2, WIDTH - 4}]);
+    std::vector<::block> blocks(static_cast<std::size_t>(WIDTH * HEIGHT), ::block{0, 0});
+
     for (std::size_t i = 0ull; i < blocks.size(); ++i)
     {
         ::block &block = blocks[i];
-        if (i >= cord(0, 37))
+        const int y = static_cast<int>(i / WIDTH);
+
+        if (y >= SURFACE_Y)
         {
-            block.bg = 14; // @note cave background
-            if (i >= cord(0, 38) && i < cord(0, 50) /* (above) lava level */ && ransuu[{0, 38}] <= 1) block.fg = 10; // rock
-            else if (i > cord(0, 50) && i < cord(0, 54) /* (above) bedrock level */ && ransuu[{0, 8}] < 3) block.fg = 4; // lava
-            else block.fg = (i >= cord(0, 54)) ? 8 : 2;
+            block.bg = 14; // cave background
+            if (y >= ROCK_Y && y < LAVA_Y && ransuu[{0, 38}] <= 1)
+                block.fg = 10; // rock
+            else if (y >= LAVA_Y && y < BEDROCK_Y && ransuu[{0, 8}] < 3)
+                block.fg = 4; // lava
+            else
+                block.fg = (y >= BEDROCK_Y) ? 8 : 2; // bedrock / dirt
         }
-        if (i == cord(main_door, 36)) block.fg = 6, block.label = "EXIT"; // @note main door
-        else if (i == cord(main_door, 37)) block.fg = 8; // @note bedrock (below main door)
+
+        if (i == static_cast<std::size_t>(cord(main_door, DOOR_Y)))
+            block.fg = 6, block.label = "EXIT";
+        else if (i == static_cast<std::size_t>(cord(main_door, DOOR_Y + 1)))
+            block.fg = 8; // bedrock under main door
     }
+
     world.blocks = std::move(blocks);
     world.name = std::move(name);
     world.mark_dirty();
@@ -928,14 +1207,22 @@ void blast::thermonuclear(::world &world, const std::string& name)
 {
     ransuu ransuu;
 
-    u_short main_door = ransuu[{2, cord(0, 60) / 100 - 4}];
-    std::vector<::block> blocks(cord(0, 60), ::block{0, 0});
+    constexpr int WIDTH = 100;
+    constexpr int HEIGHT = 60;
+    constexpr int DOOR_Y = 24;
+    constexpr int BEDROCK_Y = 54;
+
+    const u_short main_door = static_cast<u_short>(ransuu[{2, WIDTH - 4}]);
+    std::vector<::block> blocks(static_cast<std::size_t>(WIDTH * HEIGHT), ::block{0, 0});
     for (std::size_t i = 0ull; i < blocks.size(); ++i)
     {
-        blocks[i].fg = (i >= cord(0, 54)) ? 8 : 0;
+        const int y = static_cast<int>(i / WIDTH);
+        blocks[i].fg = (y >= BEDROCK_Y) ? 8 : 0;
 
-        if (i == cord(main_door, 36)) blocks[i].fg = 6; // @note main door
-        else if (i == cord(main_door, 37)) blocks[i].fg = 8; // @note bedrock (below main door)
+        if (i == static_cast<std::size_t>(cord(main_door, DOOR_Y)))
+            blocks[i].fg = 6;
+        else if (i == static_cast<std::size_t>(cord(main_door, DOOR_Y + 1)))
+            blocks[i].fg = 8;
     }
     world.blocks = std::move(blocks);
     world.name = std::move(name);

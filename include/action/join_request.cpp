@@ -86,6 +86,8 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
                     case type::CHECKPOINT:
                     case type::TOGGLEABLE_BLOCK:
                     case type::CHEST: // @note treasure, booty chest
+                    case type::CHEMICAL_COMBINER:
+                    case type::SEWING_MACHINE:
                         break;
                     case type::LOCK: 
                     {

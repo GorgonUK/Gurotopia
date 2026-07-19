@@ -14,6 +14,7 @@
 #include "action/dialog_return/display_edit.hpp"
 #include "action/dialog_return/vending.hpp"
 #include "action/dialog_return/magplant.hpp"
+#include "action/dialog_return/gameplay_extra.hpp"
 #include "database/server_config.hpp"
 #include "database/achievements.hpp"
 #include "database/quests.hpp"
@@ -58,8 +59,7 @@ void tile_change(ENetEvent& event, state state)
         if (state.id == 18 && try_fishing(event, state, block, *world)) return; // @note casting a Fishing Rod on water
 
         if (!(item.cat & CAT_PUBLIC)) // @note if block is public skip validating if peer is owner or access
-            if ((world->owner && !world->is_public && !pPeer->role) &&
-                (pPeer->user_id != world->owner && std::ranges::find(world->access, pPeer->user_id) == world->access.end())) return;
+            if (!peer_can_edit_tile(pPeer, *world, state.punch)) return;
 
         bool lock_visuals{}; // @todo this looks sloppy
         bool push_growth{};  // @note true after placing a seed/provider (refresh growth countdown)
@@ -144,7 +144,16 @@ void tile_change(ENetEvent& event, state state)
                 case type::MAIN_DOOR: throw std::runtime_error("(stand over and punch to use)");
                 case type::LOCK:
                 {
-                    if (is_tile_lock(item.id)) break; // @todo seperate area for 'range_lock'
+                    if (is_tile_lock(item.id))
+                    {
+                        // only owner (or admin) may break a tile lock
+                        auto tl = std::ranges::find(world->tile_locks, state.punch, &::tile_lock::pos);
+                        if (tl != world->tile_locks.end() &&
+                            !pPeer->role && pPeer->user_id != tl->owner &&
+                            !(world->owner && pPeer->user_id == world->owner))
+                            throw std::runtime_error("`4That lock isn't yours.``");
+                        break;
+                    }
 
                     if (world->owner != pPeer->user_id)
                         throw std::runtime_error(std::format("`5[```w{}`` `$World Locked`` by (null)`5]``", world->name)); // @todo add owner name
@@ -240,6 +249,11 @@ void tile_change(ENetEvent& event, state state)
                     }
                     break;
                 }
+                case type::CHEMICAL_COMBINER:
+                {
+                    combiner_toggle(event, state, block, *world);
+                    return; // @note open/close only — don't chip the machine each toggle
+                }
                 case type::RANDOM:
                 {
                     apply_damage_value = 
@@ -312,6 +326,22 @@ void tile_change(ENetEvent& event, state state)
                 }
             }
 
+            if (item.type == type::CHEMICAL_COMBINER)
+            {
+                auto comb = std::ranges::find(world->combiners, state.punch, &::combiner::pos);
+                if (comb != world->combiners.end())
+                {
+                    for (::slot s : comb->contents)
+                        while (s.count > 0)
+                        {
+                            short give = std::min<short>(s.count, 200);
+                            add_drop(event, ::slot(s.id, give), state.punch.by_32(), *world);
+                            s.count -= give;
+                        }
+                    world->combiners.erase(comb);
+                }
+            }
+
             if (item.type == type::XENONITE && !world_has_xenonite(*world))
             {
                 peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [](ENetPeer& p) 
@@ -359,7 +389,11 @@ void tile_change(ENetEvent& event, state state)
                     on::NameChanged(event);
                 }
                 
-                world->owner = 0; // @todo have a seperate thing for 'range_lock'
+                world->owner = 0;
+            }
+            else if (item.type == type::LOCK && is_tile_lock(item.id))
+            {
+                remove_tile_lock(*world, state.punch);
             }
 
             if (item.cat == CAT_RETURN)
@@ -610,7 +644,31 @@ void tile_change(ENetEvent& event, state state)
             {
                 case type::LOCK:
                 {
-                    if (is_tile_lock(item.id)) break; // @todo seperate area for 'range_lock'
+                    if (is_tile_lock(item.id))
+                    {
+                        auto tl = std::ranges::find(world->tile_locks, state.punch, &::tile_lock::pos);
+                        if (tl == world->tile_locks.end()) break;
+                        if (!pPeer->role && pPeer->user_id != tl->owner) break;
+
+                        send_varlist(event.peer, {
+                            "OnDialogRequest",
+                            std::format(
+                                "set_default_color|`o\n"
+                                "add_label_with_icon|big|`wEdit {}``|left|{}|\n"
+                                "embed_data|tilex|{}\n"
+                                "embed_data|tiley|{}\n"
+                                "add_spacer|small|\n"
+                                "add_textbox|This lock protects `w{}`` tiles around it.|left|\n"
+                                "add_spacer|small|\n"
+                                "add_checkbox|checkbox_public|Allow anyone to Build and Break|{}\n"
+                                "add_spacer|small|\n"
+                                "end_dialog|tile_lock_edit|Cancel|OK|\n",
+                                item.raw_name, item.id, state.punch.x, state.punch.y,
+                                tl->area.size(), to_char(tl->is_public)
+                            )
+                        });
+                        break;
+                    }
 
                     if (pPeer->user_id == world->owner)
                     {
@@ -631,7 +689,6 @@ void tile_change(ENetEvent& event, state state)
                                 "add_checkbox|checkbox_disable_music|Disable Custom Music Blocks|{}\n"
                                 "add_text_input|tempo|Music BPM|100|3|\n"
                                 "add_checkbox|checkbox_disable_music_render|Make Custom Music Blocks invisible|0\n"
-                                //"add_smalltext|Your current home world is: JOLEIT|left|\n"           // @todo only show when peer has a set home world.
                                 "add_checkbox|checkbox_set_as_home_world|Set as Home World|0|\n"
                                 "add_text_input|minimum_entry_level|World Level: |{}|3|\n"
                                 "add_smalltext|Set minimum world entry level.|\n"
@@ -729,6 +786,12 @@ void tile_change(ENetEvent& event, state state)
                     magplant_dialog(event, state, *world, item);
                     break;
                 }
+                case type::CHEMICAL_COMBINER:
+                case type::SEWING_MACHINE:
+                {
+                    combiner_dialog(event, state, *world, item);
+                    break;
+                }
             }
             return; // @note leave early else wrench will act as a block unlike fist which breaks. this is cause of state_visuals()
         }
@@ -794,7 +857,27 @@ void tile_change(ENetEvent& event, state state)
             {
                 case type::LOCK:
                 {
-                    if (is_tile_lock(item.id)) break; // @note seperate area for 'range_lock'
+                    if (is_tile_lock(item.id))
+                    {
+                        if (tile_lock_at(*world, state.punch) != nullptr)
+                            throw std::runtime_error("There's already a lock covering this area.");
+
+                        ::tile_lock tl(state.punch, static_cast<u_short>(item.id), pPeer->user_id, false);
+                        tl.area = claim_tile_lock_area(*world, state.punch, tile_lock_capacity(static_cast<u_short>(item.id)));
+                        apply_tile_lock(*world, tl);
+                        world->tile_locks.push_back(std::move(tl));
+                        lock_visuals = true;
+
+                        const std::string placed_message = std::format(
+                            "`5[```w{}`` placed a `$Area Lock`` protecting `w{}`` tiles`5]``",
+                            pPeer->growid, world->tile_locks.back().area.size());
+                        peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [&pPeer, placed_message](ENetPeer& peer)
+                        {
+                            send_varlist(&peer, { "OnTalkBubble", pPeer->netid, placed_message });
+                            on::ConsoleMessage(&peer, placed_message);
+                        });
+                        break;
+                    }
 
                     if (!world->owner)
                     {
@@ -854,6 +937,16 @@ void tile_change(ENetEvent& event, state state)
                         world->vendings.emplace_back(state.punch);
                     break;
                 }
+                case type::CHEMICAL_COMBINER:
+                {
+                    // start OPEN (nonsolid) so ingredients can be dropped onto it
+                    block.state[2] |= S_TOGGLE;
+                    if (std::ranges::find_if(world->combiners, [&](const ::combiner &c) {
+                            return c.pos.x_int() == state.punch.x_int() && c.pos.y_int() == state.punch.y_int();
+                        }) == world->combiners.end())
+                        world->combiners.emplace_back(state.punch);
+                    break;
+                }
                 case type::MAGPLANT:
                 {
                     if (std::ranges::find(world->magplants, state.punch, &::magplant::pos) == world->magplants.end())
@@ -873,6 +966,7 @@ void tile_change(ENetEvent& event, state state)
         }
         // @note common tail: sends the tile-change visual for BOTH breaking and placing
         ::pos affected = state.punch;
+        const int lock_item_id = state.id;
         state.netid = pPeer->netid; // @todo sometimes rgt has this as 0
         state_visuals(*event.peer, std::move(state)); // finished.
         if (push_growth)
@@ -881,9 +975,9 @@ void tile_change(ENetEvent& event, state state)
         {
             state_visuals(*event.peer, ::state{
                 .type = 0x0f, // @note PACKET_SEND_LOCK
-                .netid = world->owner, 
+                .netid = pPeer->user_id, 
                 .peer_state = peer_state::S_EXTENDED, 
-                .id = state.id,
+                .id = lock_item_id,
                 .punch = affected
             });
         }

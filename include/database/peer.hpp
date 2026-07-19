@@ -160,6 +160,12 @@ public:
 
     std::chrono::steady_clock::time_point last_cast{}; // @note last fishing attempt (not persisted)
 
+    /* active player-to-player trade (dialog-based, not persisted) */
+    int trade_with_netid{-1};
+    std::vector<::slot> trade_offer{};
+    bool trade_ready{};
+    bool trade_confirmed{};
+
     bool dirty{}; // @note needs DB flush
     bool inventory_initialized{}; // @note true after DB load or starter-kit grant
 };

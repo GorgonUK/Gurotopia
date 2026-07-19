@@ -317,8 +317,10 @@ bool peer::mysql_save_progress()
         "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON DUPLICATE KEY UPDATE "
+        // @note role deliberately NOT updated: the DB is authoritative for it, so a
+        // manual `UPDATE peer_state SET role=1` can't be clobbered by a session save.
         "gems=VALUES(gems), level=VALUES(level), xp=VALUES(xp), slot_size=VALUES(slot_size), "
-        "clothing=VALUES(clothing), fav=VALUES(fav), role=VALUES(role), "
+        "clothing=VALUES(clothing), fav=VALUES(fav), "
         "skin_color=VALUES(skin_color), hair_color=VALUES(hair_color), country=VALUES(country), "
         "fires_removed=VALUES(fires_removed), gbc_pity=VALUES(gbc_pity), initialized=VALUES(initialized), "
         "recent_worlds=VALUES(recent_worlds), my_worlds=VALUES(my_worlds), achievements=VALUES(achievements), "

@@ -16,6 +16,7 @@
 #include "display_edit.hpp"
 #include "vending.hpp"
 #include "magplant.hpp"
+#include "gameplay_extra.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -33,6 +34,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
 
     {"billboard_edit", std::bind(&billboard_edit, std::placeholders::_1, std::placeholders::_2)},
     {"lock_edit", std::bind(&lock_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"tile_lock_edit", std::bind(&tile_lock_edit, std::placeholders::_1, std::placeholders::_2)},
 
     {"create_blast", std::bind(&create_blast, std::placeholders::_1, std::placeholders::_2)},
     {"socialportal", std::bind(&socialportal, std::placeholders::_1, std::placeholders::_2)},
@@ -48,4 +50,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"display_edit", std::bind(&display_edit, std::placeholders::_1, std::placeholders::_2)},
     {"vending", std::bind(&vending_edit, std::placeholders::_1, std::placeholders::_2)},
     {"magplant_edit", std::bind(&magplant_edit, std::placeholders::_1, std::placeholders::_2)},
+
+    {"trade_edit", std::bind(&trade_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"combiner_edit", std::bind(&combiner_edit, std::placeholders::_1, std::placeholders::_2)},
 };

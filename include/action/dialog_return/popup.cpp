@@ -6,6 +6,7 @@
 #include "tools/create_dialog.hpp"
 #include "database/quests.hpp"
 #include "surgery.hpp"
+#include "gameplay_extra.hpp"
 
 #include "popup.hpp"
 
@@ -131,6 +132,17 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
             .add_spacer("small")
             .add_quick_exit();
         send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("popup", "", "Close") });
+    }
+    else if (hPipe["buttonClicked"] == "trade")
+    {
+        const short netid = atoi(hPipe["netID"].c_str());
+        ENetPeer *target{};
+        peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [netid, &target](ENetPeer &peer)
+        {
+            if (static_cast<::peer*>(peer.data)->netid == netid) target = &peer;
+        });
+        if (target == nullptr || target == event.peer) return;
+        trade_dialog(event, target);
     }
     else if (hPipe["buttonClicked"] == "surgery_start")
     {
