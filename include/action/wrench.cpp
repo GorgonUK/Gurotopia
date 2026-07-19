@@ -7,9 +7,10 @@ void action::wrench(ENetEvent& event, const std::string& header)
     std::vector<std::string> pipes = readch(header, '|');
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
-    if ((pipes[3ull] == "netid" && !pipes[4ull].empty()/*empty netid*/))
+    auto field = std::ranges::find(pipes, "netid");
+    if (field != pipes.end() && std::next(field) != pipes.end() && !std::next(field)->empty())
     {
-        const short netid = atoi(pipes[4ull].c_str());
+        const short netid = atoi(std::next(field)->c_str());
         peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [event, pPeer, netid](ENetPeer& peer) 
         {
             ::peer *pOthers = static_cast<::peer*>(peer.data);

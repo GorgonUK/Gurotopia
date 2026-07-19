@@ -453,9 +453,14 @@ std::vector<ENetPeer*> peers(const std::string &world, peer_condition condition,
     for (ENetPeer &peer : std::span(host->peers, host->peerCount))
         if (peer.state == ENET_PEER_STATE_CONNECTED)
         {
+            // @note a peer can be CONNECTED at the ENet layer while its queued
+            // CONNECT event is still pending, so peer.data is null until _connect
+            // runs. Skip it to avoid dereferencing null during broadcasts.
+            ::peer *pOthers = static_cast<::peer*>(peer.data);
+            if (pOthers == nullptr) continue;
+
             if (condition == peer_condition::PEER_SAME_WORLD)
             {
-                ::peer *pOthers = static_cast<::peer*>(peer.data);
                 if (pOthers->netid == 0 || (pOthers->recent_worlds.back() != world)) continue;
             }
             fun(peer);
