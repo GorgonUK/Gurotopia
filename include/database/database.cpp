@@ -53,6 +53,8 @@ void create_table_if_not_exist()
             initialized TINYINT NOT NULL DEFAULT 0,
             recent_worlds BLOB NOT NULL,
             my_worlds BLOB NOT NULL,
+            achievements BLOB NOT NULL,
+            quest BLOB NOT NULL,
             CONSTRAINT fk_peer_state_uid FOREIGN KEY (uid) REFERENCES peer(uid) ON DELETE CASCADE
         )
     )");
@@ -60,6 +62,12 @@ void create_table_if_not_exist()
     // migration: add recent/my worlds columns to pre-existing peer_state tables
     run_query("ALTER TABLE peer_state ADD COLUMN recent_worlds BLOB NOT NULL", /*silent_dup=*/true);
     run_query("ALTER TABLE peer_state ADD COLUMN my_worlds BLOB NOT NULL", /*silent_dup=*/true);
+
+    // migration: achievement counters (u_int per ach::, see database/achievements.hpp)
+    run_query("ALTER TABLE peer_state ADD COLUMN achievements BLOB NOT NULL", /*silent_dup=*/true);
+
+    // migration: active daily quest {goal, progress, target, reward_gems} as 4 u_ints
+    run_query("ALTER TABLE peer_state ADD COLUMN quest BLOB NOT NULL", /*silent_dup=*/true);
 
     run_query(R"(
         CREATE TABLE IF NOT EXISTS peer_inventory (

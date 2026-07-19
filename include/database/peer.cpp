@@ -97,7 +97,7 @@ bool peer::mysql_load_progress()
 
     ::hStmt hStmt{
         "SELECT gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
-        "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds "
+        "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest "
         "FROM peer_state WHERE uid = ? LIMIT 1"
     };
 
@@ -116,11 +116,13 @@ bool peer::mysql_load_progress()
     std::vector<u_char> clothing_blob(40, 0);
     std::vector<u_char> fav_blob;
     std::vector<u_char> recent_blob, my_blob;
-    unsigned long clothing_len = 0, fav_len = 0, country_len = 0, recent_len = 0, my_len = 0;
+    std::vector<u_char> ach_blob(64, 0);
+    std::vector<u_char> quest_blob(16, 0);
+    unsigned long clothing_len = 0, fav_len = 0, country_len = 0, recent_len = 0, my_len = 0, ach_len = 0, quest_len = 0;
 
     fav_blob.resize(512);
 
-    MYSQL_BIND results[15]{};
+    MYSQL_BIND results[17]{};
     results[0]  = make_bind_out(gems);
     results[1]  = make_bind_out(level);
     results[2]  = make_bind_out(xp);
@@ -137,6 +139,8 @@ bool peer::mysql_load_progress()
     results[12] = make_bind_out(initialized);
     results[13] = make_bind_out_blob(recent_blob, recent_len);
     results[14] = make_bind_out_blob(my_blob, my_len);
+    results[15] = make_bind_out_blob(ach_blob, ach_len);
+    results[16] = make_bind_out_blob(quest_blob, quest_len);
 
     if (mysql_stmt_bind_result(hStmt.pStmt, results))
     {
@@ -170,6 +174,8 @@ bool peer::mysql_load_progress()
     trim_blob(fav_blob, fav_len);
     trim_blob(recent_blob, recent_len);
     trim_blob(my_blob, my_len);
+    trim_blob(ach_blob, ach_len);
+    trim_blob(quest_blob, quest_len);
 
     this->gems = gems;
     this->level = { static_cast<u_short>(level), static_cast<u_short>(xp) };
@@ -192,6 +198,18 @@ bool peer::mysql_load_progress()
         short id = 0;
         std::memcpy(&id, fav_blob.data() + i, sizeof(short));
         this->fav.push_back(id);
+    }
+
+    this->ach_progress.fill(0);
+    for (std::size_t i = 0; i < this->ach_progress.size() && (i + 1) * sizeof(u_int) <= ach_blob.size(); ++i)
+        std::memcpy(&this->ach_progress[i], ach_blob.data() + i * sizeof(u_int), sizeof(u_int));
+
+    this->quest = ::Quest{};
+    if (quest_blob.size() >= sizeof(u_int) * 4ull)
+    {
+        u_int packed[4]{};
+        std::memcpy(packed, quest_blob.data(), sizeof(packed));
+        this->quest = ::Quest{ packed[0], packed[1], packed[2], packed[3] };
     }
 
     // '\n'-joined world names -> fill the fixed array from the back so that
@@ -275,6 +293,13 @@ bool peer::mysql_save_progress()
     std::vector<u_char> recent_blob = join_world_list(this->recent_worlds);
     std::vector<u_char> my_blob = join_world_list(this->my_worlds);
 
+    std::vector<u_char> ach_blob(this->ach_progress.size() * sizeof(u_int), 0);
+    std::memcpy(ach_blob.data(), this->ach_progress.data(), ach_blob.size());
+
+    const u_int quest_packed[4]{ this->quest.goal, this->quest.progress, this->quest.target, this->quest.reward_gems };
+    std::vector<u_char> quest_blob(sizeof(quest_packed), 0);
+    std::memcpy(quest_blob.data(), quest_packed, quest_blob.size());
+
     signed gems = this->gems;
     unsigned level = this->level.front();
     unsigned xp = this->level.back();
@@ -289,17 +314,18 @@ bool peer::mysql_save_progress()
     ::hStmt upsert{
         "INSERT INTO peer_state "
         "(uid, gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
-        "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON DUPLICATE KEY UPDATE "
         "gems=VALUES(gems), level=VALUES(level), xp=VALUES(xp), slot_size=VALUES(slot_size), "
         "clothing=VALUES(clothing), fav=VALUES(fav), role=VALUES(role), "
         "skin_color=VALUES(skin_color), hair_color=VALUES(hair_color), country=VALUES(country), "
         "fires_removed=VALUES(fires_removed), gbc_pity=VALUES(gbc_pity), initialized=VALUES(initialized), "
-        "recent_worlds=VALUES(recent_worlds), my_worlds=VALUES(my_worlds)"
+        "recent_worlds=VALUES(recent_worlds), my_worlds=VALUES(my_worlds), achievements=VALUES(achievements), "
+        "quest=VALUES(quest)"
     };
 
-    MYSQL_BIND params[16] = {
+    MYSQL_BIND params[18] = {
         make_bind_in(this->user_id),
         make_bind_in(gems),
         make_bind_in(level),
@@ -315,7 +341,9 @@ bool peer::mysql_save_progress()
         make_bind_in(gbc_pity),
         make_bind_in(initialized),
         make_bind_in_blob(recent_blob),
-        make_bind_in_blob(my_blob)
+        make_bind_in_blob(my_blob),
+        make_bind_in_blob(ach_blob),
+        make_bind_in_blob(quest_blob)
     };
 
     if (mysql_stmt_bind_param(upsert.pStmt, params) || mysql_stmt_execute(upsert.pStmt))

@@ -58,6 +58,17 @@ struct Friend {
     bool mute{};
 };
 
+/* peer's active daily quest (see database/quests.hpp) */
+struct Quest {
+    u_int goal{0xff}; // @note quest_goal:: index, 0xff = no active quest
+    u_int progress{};
+    u_int target{};
+    u_int reward_gems{};
+
+    bool active()   const { return goal != 0xff; }
+    bool complete() const { return active() && progress >= target; }
+};
+
 enum role : u_char {
     PLAYER, 
     MODERATOR, 
@@ -143,6 +154,11 @@ public:
 
     u_short fires_removed{};
     u_short gbc_pity{}; // @note GBC pity; for each 100 will receive super GBC
+
+    std::array<u_int, 8ull> ach_progress{}; // @note per-achievement counters, indexed by ach:: (see database/achievements.hpp)
+    ::Quest quest{}; // @note active daily quest
+
+    std::chrono::steady_clock::time_point last_cast{}; // @note last fishing attempt (not persisted)
 
     bool dirty{}; // @note needs DB flush
     bool inventory_initialized{}; // @note true after DB load or starter-kit grant

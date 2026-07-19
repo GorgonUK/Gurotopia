@@ -10,6 +10,9 @@
 #include "create_blast.hpp"
 #include "socialportal.hpp"
 #include "megaphone.hpp"
+#include "letter_box.hpp"
+#include "quest_menu.hpp"
+#include "surgery.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -31,4 +34,11 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"create_blast", std::bind(&create_blast, std::placeholders::_1, std::placeholders::_2)},
     {"socialportal", std::bind(&socialportal, std::placeholders::_1, std::placeholders::_2)},
     {"megaphone", std::bind(&megaphone, std::placeholders::_1, std::placeholders::_2)},
+
+    {"mailbox_edit", std::bind(&letter_box, std::placeholders::_1, std::placeholders::_2)},
+    {"bulletin_edit", std::bind(&letter_box, std::placeholders::_1, std::placeholders::_2)},
+    {"donation_edit", std::bind(&letter_box, std::placeholders::_1, std::placeholders::_2)},
+
+    {"quest_menu", std::bind(&quest_menu, std::placeholders::_1, std::placeholders::_2)},
+    {"surgery", std::bind(&surgery, std::placeholders::_1, std::placeholders::_2)},
 };

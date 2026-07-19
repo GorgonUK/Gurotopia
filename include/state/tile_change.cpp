@@ -5,11 +5,15 @@
 #include "on/ConsoleMessage.hpp"
 #include "commands/weather.hpp"
 #include "item_activate.hpp"
+#include "fishing.hpp"
 #include "tools/ransuu.hpp"
 #include "tools/create_dialog.hpp"
 #include "action/quit_to_exit.hpp"
 #include "action/join_request.hpp"
+#include "action/dialog_return/letter_box.hpp"
 #include "database/server_config.hpp"
+#include "database/achievements.hpp"
+#include "database/quests.hpp"
 #include "item_activate_object.hpp"
 
 #include "tile_change.hpp"
@@ -47,6 +51,8 @@ void tile_change(ENetEvent& event, state state)
                 remove_fire(event, state, block, *world);
                 return; // @note avoid hitting the block
             }
+
+        if (state.id == 18 && try_fishing(event, state, block, *world)) return; // @note casting a Fishing Rod on water
 
         if (!(item.cat & CAT_PUBLIC)) // @note if block is public skip validating if peer is owner or access
             if ((world->owner && !world->is_public && !pPeer->role) &&
@@ -256,6 +262,19 @@ void tile_change(ENetEvent& event, state state)
             block.label = "";
             block.state[2] = 0x00; // @note reset tile direction
             block.state[3] &= ~S_VANISH; // @note remove paint
+
+            if (item.type == type::MAILBOX || item.type == type::BULLETIN || item.type == type::DONATION_BOX)
+                std::erase_if(world->letters, [&state](const ::letter &letter) { return letter.pos == state.punch; }); // @note broken box drops its contents into the void
+
+            if (item.type == type::XENONITE && !world_has_xenonite(*world))
+            {
+                peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [](ENetPeer& p) 
+                {
+                    ::peer *pOthers = static_cast<::peer*>(p.data);
+                    pOthers->state &= ~S_DOUBLE_JUMP;
+                    on::SetClothing(p);
+                });
+            }
             
             if (item.id == 392/*Heartstone*/ || item.id == 3402/*GBC*/ || item.id == 9350/*Super GBC*/)
             {
@@ -330,9 +349,14 @@ void tile_change(ENetEvent& event, state state)
                     // @note breaking a tree: chance to drop the seed (item.id is the seed)
                     if (!ransuu[{0, 3}])
                         add_drop(event, ::slot(item.id, 1), state.punch.by_32(), *world);
+
+                    achievement_progress(event, ACH_TREES_HARVESTED);
+                    quest_progress(event, QUEST_HARVEST_TREES);
                 }
 
                 pPeer->add_xp(event, std::trunc(1.0f + item.rarity / 5.0f));
+                achievement_progress(event, ACH_BLOCKS_BROKEN);
+                quest_progress(event, QUEST_BREAK_BLOCKS);
             }
         } // @note delete im, id
         else if (item.cloth_type != clothing::none) 
@@ -642,6 +666,13 @@ void tile_change(ENetEvent& event, state state)
                     // @todo
                     break;
                 }
+                case type::MAILBOX:
+                case type::BULLETIN:
+                case type::DONATION_BOX:
+                {
+                    letter_box_dialog(event, state, *world, item);
+                    break;
+                }
                 case type::VENDING_MACHINE:
                 {
                     send_varlist(event.peer, {
@@ -759,11 +790,24 @@ void tile_change(ENetEvent& event, state state)
                     block.tick = growth_planted_tick(item.tick);
                     break;
                 }
+                case type::XENONITE:
+                {
+                    peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [](ENetPeer& p) 
+                    {
+                        ::peer *pOthers = static_cast<::peer*>(p.data);
+                        pOthers->state |= S_DOUBLE_JUMP;
+                        on::SetClothing(p);
+                        on::ConsoleMessage(&p, "`9The Xenonite Crystal empowers everyone in the world!``");
+                    });
+                    break;
+                }
             }
             block.state[2] |= (pPeer->facing_left) ? S_LEFT : S_RIGHT;
             (item.type == type::BACKGROUND) ? block.bg = state.id : block.fg = state.id;
             pPeer->emplace(::slot(item.id, -1));
             world->mark_dirty();
+            achievement_progress(event, ACH_BLOCKS_PLACED);
+            quest_progress(event, QUEST_PLACE_BLOCKS);
 
             // @note push elapsed after placing so the client countdown matches growth_speed
             push_growth = (item.type == type::SEED || item.type == type::PROVIDER);

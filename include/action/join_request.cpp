@@ -8,6 +8,7 @@
 #include "commands/weather.hpp"
 #include "tools/ransuu.hpp"
 #include "database/world_ban.hpp"
+#include "database/achievements.hpp"
 
 #include "join_request.hpp"
 
@@ -238,6 +239,45 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
                         *w_data++ = 0x00; // @todo if glow toggled this becomes 0x10
                         break;
                     }
+                    case type::BULLETIN:
+                    case type::DONATION_BOX:
+                    {
+                        // @note contents live server-side (world.letters); the client only needs the extra header
+                        data.resize(data.size() + 1ull + 6ull + 1ull); // @note {1} 00 00 00 00 00 00 {1}
+                        w_data = data.data() + offset;
+
+                        *w_data++ = (item.type == type::BULLETIN) ? 0x07 : 0x0c;
+                        *reinterpret_cast<short*>(w_data) = 0; w_data += sizeof(short); // @note 3 empty strings
+                        *reinterpret_cast<short*>(w_data) = 0; w_data += sizeof(short);
+                        *reinterpret_cast<short*>(w_data) = 0; w_data += sizeof(short);
+                        *w_data++ = 0x00; // @note flags
+                        break;
+                    }
+                    case type::XENONITE:
+                    {
+                        data.resize(data.size() + 1ull + 1ull + 4ull);
+                        w_data = data.data() + offset;
+
+                        *w_data++ = 0x12;
+                        *w_data++ = 0x00; // @note flags
+                        *reinterpret_cast<u_int*>(w_data) = 0; w_data += sizeof(u_int); // @note flags2
+
+                        if (std::ranges::find(buffs, "`9XENONITE") == buffs.end())
+                            buffs.emplace_back("`9XENONITE");
+                        break;
+                    }
+                    case type::SPIRIT_BOARD:
+                    {
+                        data.resize(data.size() + 1ull + 4ull + 4ull + 4ull);
+                        w_data = data.data() + offset;
+
+                        *w_data++ = 0x44;
+                        *reinterpret_cast<int*>(w_data) = 0; w_data += sizeof(int); // @note player count
+                        *reinterpret_cast<short*>(w_data) = 0; w_data += sizeof(short); // @note 2 empty strings
+                        *reinterpret_cast<short*>(w_data) = 0; w_data += sizeof(short);
+                        *reinterpret_cast<u_int*>(w_data) = 0; w_data += sizeof(u_int); // @note item count
+                        break;
+                    }
                     default: 
                         throw std::runtime_error(std::format("`w{}``'s visuals has not been added yet. ({})", 
                             item.raw_name, item.type));
@@ -319,8 +359,11 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
             )
         );
         ++world.visitors;
+        if (std::ranges::find(buffs, "`9XENONITE") != buffs.end())
+            pPeer->state |= S_DOUBLE_JUMP;
         on::SetClothing(*event.peer);
         on::CountryState(event);
+        achievement_progress(event, ACH_WORLDS_VISITED);
     }
     catch (const std::exception& exc)
     {

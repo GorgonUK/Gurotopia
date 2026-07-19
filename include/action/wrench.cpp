@@ -1,5 +1,6 @@
 #include "pch.hpp"
 #include "tools/create_dialog.hpp"
+#include "database/achievements.hpp"
 #include "wrench.hpp"
 
 void action::wrench(ENetEvent& event, const std::string& header) 
@@ -42,7 +43,7 @@ void action::wrench(ENetEvent& event, const std::string& header)
                             .add_custom_button("bonus", "image:interface/large/gui_wrench_daily_bonus_active.rttex;image_size:400,260;width:0.19;")
                             .add_custom_button("my_worlds", "image:interface/large/gui_wrench_my_worlds.rttex;image_size:400,260;width:0.19;")
                             .add_custom_button("alist", "image:interface/large/gui_wrench_achievements.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_label("(0/173)"/*@todo add achivements*/, "target:alist;top:0.72;left:0.5;size:small")
+                            .add_custom_label(std::format("({}/{})", achievements_completed(*pOthers), (int)ACH_COUNT), "target:alist;top:0.72;left:0.5;size:small")
                             .add_custom_button("emojis", "image:interface/large/gui_wrench_growmojis.rttex;image_size:400,260;width:0.19;")
                             .add_custom_button("marvelous_missions", "image:interface/large/gui_wrench_marvelous_missions.rttex;image_size:400,260;width:0.19;")
                             .add_custom_button("title_edit", "image:interface/large/gui_wrench_title.rttex;image_size:400,260;width:0.19;")
@@ -55,7 +56,7 @@ void action::wrench(ENetEvent& event, const std::string& header)
                             .add_spacer("small")
                             .set_custom_spacing(0, 0) // @todo research why rgt adds this too. is 0, 0 unaffecting? or is this resetting the previous 5, 10 spacing
                             .add_spacer("small")
-                            .add_textbox("Surgeon Level: 0")
+                            .add_textbox(std::format("Surgeon Level: {}", pOthers->ach_progress[ACH_SURGERIES_DONE]))
                             .add_spacer("small")
                             .add_textbox("`wActive effects:``")
                             /* @todo handle peer's effects */
@@ -88,11 +89,11 @@ void action::wrench(ENetEvent& event, const std::string& header)
                         .add_label_with_icon("big", std::format("`{}{} (`2{}``)``", pOthers->prefix, pOthers->growid, lvl), 18)
                         .embed_data("netID", netid)
                         .add_spacer("small")
-                        .add_achieve("0"/*@todo add achivements*/)
+                        .add_achieve(std::to_string(achievements_completed(*pOthers)))
                         .add_custom_margin(75, -70.85)
                         .add_custom_margin(-75, 70.85)
                         .add_spacer("small")
-                        .add_label("small", "`1Achievements:`` 0/173"/*add total achivements*/)
+                        .add_label("small", std::format("`1Achievements:`` {}/{}", achievements_completed(*pOthers), (int)ACH_COUNT))
                         .add_spacer("small")
                         .add_label("small", "`1Account Age:`` 0 days")
                         .add_spacer("small")
@@ -104,6 +105,8 @@ void action::wrench(ENetEvent& event, const std::string& header)
                         .add_button("show_clothes", "`wView worn clothes``")
                         .add_button("ignore_player", "`wIgnore Player``")
                         .add_button("report_player", "`wReport Player``");
+                    if (std::ranges::find(pPeer->slots, 4296/*Surg-E*/, &::slot::id) != pPeer->slots.end())
+                        dialog.add_button("surgery_start", "`wPerform Surgery``");
                     if (is_owner)
                         dialog
                             .add_button("pull_player", "`wPull``")

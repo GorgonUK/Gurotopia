@@ -2,6 +2,9 @@
 #include "on/ConsoleMessage.hpp"
 #include "action/quit_to_exit.hpp"
 #include "database/world_ban.hpp"
+#include "database/achievements.hpp"
+#include "tools/create_dialog.hpp"
+#include "surgery.hpp"
 
 #include "popup.hpp"
 
@@ -101,6 +104,40 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
     else if (hPipe["buttonClicked"] == "seed_diary_customization")
     {
         send_varlist(event.peer, { "OnDialogRequestRML", "show_seed_diary_ui" });
+    }
+    else if (hPipe["buttonClicked"] == "alist")
+    {
+        ::create_dialog dialog;
+        dialog
+            .set_default_color("`o")
+            .add_label_with_icon("big", "`wAchievements``", 7376)
+            .add_spacer("small")
+            .add_textbox(std::format("You've earned `w{}`` of `w{}`` achievements.", achievements_completed(*pPeer), (int)ACH_COUNT))
+            .add_spacer("small");
+        for (u_char i = 0; i < ACH_COUNT; ++i)
+        {
+            const ::achievement &achievement = achievements[i];
+            const u_int progress = pPeer->ach_progress[i];
+            dialog.add_textbox((progress >= achievement.goal) ?
+                std::format("`2{}`` - {} `2(done!)``", achievement.name, achievement.description) :
+                std::format("`w{}`` - {} `o({}/{})``", achievement.name, achievement.description, progress, achievement.goal));
+        }
+        dialog
+            .add_spacer("small")
+            .add_quick_exit();
+        send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("popup", "", "Close") });
+    }
+    else if (hPipe["buttonClicked"] == "surgery_start")
+    {
+        const short netid = atoi(hPipe["netID"].c_str());
+        ENetPeer *target{};
+        peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [netid, &target](ENetPeer &peer)
+        {
+            if (static_cast<::peer*>(peer.data)->netid == netid) target = &peer;
+        });
+        if (target == nullptr || target == event.peer) return;
+
+        surgery_start(event, target);
     }
     else if (hPipe["buttonClicked"] == "pull_player")
     {
