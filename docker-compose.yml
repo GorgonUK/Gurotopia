@@ -9,9 +9,6 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
     volumes:
       - gurotopia-db:/var/lib/mysql
-    ports:
-      # optional: expose for local tools; remove in public VPS if unused
-      - "3306:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s
@@ -21,6 +18,8 @@ services:
   server:
     build: .
     restart: unless-stopped
+    # line-buffer stdout/stderr so `docker compose logs` shows output live
+    command: ["stdbuf", "-oL", "-eL", "./main.out"]
     depends_on:
       db:
         condition: service_healthy

@@ -27,6 +27,7 @@
             std::vector<std::string> pipes;
             for (std::string line; std::getline(file, line); ) 
             {
+                if (!line.empty() && line.back() == '\r') line.pop_back(); // @note Windows CRLF on Linux
                 auto pipe_pair = readch(line, '|');
                 pipes.insert(pipes.end(), pipe_pair.begin(), pipe_pair.end());
             }

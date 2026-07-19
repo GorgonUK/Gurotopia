@@ -10,22 +10,28 @@ void parse_store()
     std::ifstream file("resources/store.txt");
     for (std::string line; std::getline(file, line); )
     {
+        if (!line.empty() && line.back() == '\r') line.pop_back(); // @note Windows CRLF on Linux
         if (line.empty() || line.starts_with("#")) continue; // @note '#' initiates a comment
         std::vector<std::string> pipes = readch(line, '|');
+        if (pipes.size() < 9) continue;
         ::shouhin shouhin{
             .btn = pipes[1],
             .name = pipes[2],
             .rttx = pipes[3],
             .description = pipes[4],
-            .tex1 = pipes[5].front(),
-            .tex2 = pipes[6].front(), // @todo
+            .tex1 = pipes[5].empty() ? '\0' : pipes[5].front(),
+            .tex2 = pipes[6].empty() ? '\0' : pipes[6].front(), // @todo
             .cost = stoi(pipes[7])
         };
-        std::vector<std::string> tachi = readch(pipes[8], ',');
-        for (std::string &im : tachi)
+        if (!pipes[8].empty())
         {
-            std::vector<std::string> co = readch(im, ':'); // @note 'co' short for colon
-            shouhin.im.emplace_back(stoi(co[0]), stoi(co[1]));
+            std::vector<std::string> tachi = readch(pipes[8], ',');
+            for (std::string &im : tachi)
+            {
+                std::vector<std::string> co = readch(im, ':'); // @note 'co' short for colon
+                if (co.size() < 2) continue;
+                shouhin.im.emplace_back(stoi(co[0]), stoi(co[1]));
+            }
         }
         shouhin_tachi.emplace_back(stoi(pipes[0]), shouhin);
     }

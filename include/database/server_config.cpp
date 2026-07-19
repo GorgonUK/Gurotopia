@@ -27,6 +27,7 @@
         {
             for (std::string line; std::getline(file, line); )
             {
+                if (!line.empty() && line.back() == '\r') line.pop_back(); // @note Windows CRLF on Linux
                 if (line.empty() || line.front() == '#')
                     continue;
 
