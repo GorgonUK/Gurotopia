@@ -17,3 +17,6 @@ deploy/items.dat
 
 # VSC user settings
 .vscode/settings.json
+
+# machine handoff bundle (contains VPS credentials, never commit)
+handoff/
