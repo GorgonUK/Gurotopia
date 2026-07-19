@@ -76,34 +76,44 @@ void action::wrench(ENetEvent& event, const std::string& header)
                 /* wrench someone else */
                 else
                 {
+                    auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
+                    const bool can_invite = world != worlds.end() && world->owner == pPeer->user_id
+                        && pOthers->user_id != world->owner
+                        && std::ranges::find(world->access, pOthers->user_id) == world->access.end();
+
+                    ::create_dialog dialog;
+                    dialog
+                        .embed_data("netID", netid)
+                        .add_popup_name("WrenchMenu")
+                        .set_default_color("`o")
+                        .add_label_with_icon("big", std::format("`{}{} (`2{}``)``", pOthers->prefix, pOthers->growid, lvl), 18)
+                        .embed_data("netID", netid)
+                        .add_spacer("small")
+                        .add_achieve("0"/*@todo add achivements*/)
+                        .add_custom_margin(75, -70.85)
+                        .add_custom_margin(-75, 70.85)
+                        .add_spacer("small")
+                        .add_label("small", "`1Achievements:`` 0/173"/*add total achivements*/)
+                        .add_spacer("small")
+                        .add_label("small", "`1Account Age:`` 0 days")
+                        .add_spacer("small")
+                        .add_button("trade", "`wTrade``")
+                        .add_button("sendpm", "`wSend Message``")
+                        .add_textbox("(No Battle Leash equipped)")
+                        .add_textbox("You need a valid license to battle!")
+                        .add_button("friend_add", "`wAdd as friend``")
+                        .add_button("show_clothes", "`wView worn clothes``")
+                        .add_button("ignore_player", "`wIgnore Player``")
+                        .add_button("report_player", "`wReport Player``");
+                    if (can_invite)
+                        dialog.add_button("add_to_worldlock", "`wAdd to World Lock``");
+                    dialog
+                        .add_spacer("small")
+                        .add_quick_exit();
+
                     send_varlist(event.peer, {
                         "OnDialogRequest",
-                        ::create_dialog()
-                            .embed_data("netID", netid)
-                            .add_popup_name("WrenchMenu")
-                            .set_default_color("`o")
-                            .add_label_with_icon("big", std::format("`{}{} (`2{}``)``", pOthers->prefix, pOthers->growid, lvl), 18)
-                            .embed_data("netID", netid)
-                            .add_spacer("small")
-                            .add_achieve("0"/*@todo add achivements*/)
-                            .add_custom_margin(75, -70.85)
-                            .add_custom_margin(-75, 70.85)
-                            .add_spacer("small")
-                            .add_label("small", "`1Achievements:`` 0/173"/*add total achivements*/)
-                            .add_spacer("small")
-                            .add_label("small", "`1Account Age:`` 0 days")
-                            .add_spacer("small")
-                            .add_button("trade", "`wTrade``")
-                            .add_button("sendpm", "`wSend Message``")
-                            .add_textbox("(No Battle Leash equipped)")
-                            .add_textbox("You need a valid license to battle!")
-                            .add_button("friend_add", "`wAdd as friend``")
-                            .add_button("show_clothes", "`wView worn clothes``")
-                            .add_button("ignore_player", "`wIgnore Player``")
-                            .add_button("report_player", "`wReport Player``")
-                            .add_spacer("small")
-                            .add_quick_exit()
-                            .end_dialog("popup", "", "Continue")
+                        dialog.end_dialog("popup", "", "Continue")
                     });
                 }
                 return; // @note early exit else iteration will continue for EVERYONE in the world.

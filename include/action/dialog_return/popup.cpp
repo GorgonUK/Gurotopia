@@ -1,4 +1,7 @@
 #include "pch.hpp"
+#include "on/ConsoleMessage.hpp"
+#include "tools/create_dialog.hpp"
+#include "tools/logger.hpp"
 
 #include "popup.hpp"
 
@@ -71,5 +74,63 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
     else if (hPipe["buttonClicked"] == "seed_diary_customization")
     {
         send_varlist(event.peer, { "OnDialogRequestRML", "show_seed_diary_ui" });
+    }
+    else if (hPipe["buttonClicked"] == "add_to_worldlock")
+    {
+        auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
+        if (world == worlds.end() || world->owner != pPeer->user_id)
+        {
+            send_varlist(event.peer, { "OnTextOverlay", "Only the World Lock owner can invite players." });
+            return;
+        }
+
+        const short netid = static_cast<short>(atoi(hPipe["netID"].c_str()));
+        ENetPeer *target = nullptr;
+        peers(world->name, PEER_SAME_WORLD, [netid, &target](ENetPeer &peer)
+        {
+            ::peer *pOthers = static_cast<::peer*>(peer.data);
+            if (pOthers && pOthers->netid == netid)
+                target = &peer;
+        });
+
+        if (target == nullptr)
+        {
+            send_varlist(event.peer, { "OnTextOverlay", "That player is no longer here." });
+            return;
+        }
+
+        ::peer *pTarget = static_cast<::peer*>(target->data);
+        if (pTarget->user_id == world->owner
+            || std::ranges::find(world->access, pTarget->user_id) != world->access.end())
+        {
+            send_varlist(event.peer, { "OnTextOverlay", "They already have access." });
+            return;
+        }
+
+        if (std::ranges::find(world->access, 0) == world->access.end())
+        {
+            send_varlist(event.peer, { "OnTextOverlay", "No free World Lock access slots." });
+            return;
+        }
+
+        send_varlist(target, {
+            "OnDialogRequest",
+            ::create_dialog()
+                .set_default_color("`o")
+                .add_label_with_icon("big", "`wWorld Lock Invite``", 242)
+                .add_spacer("small")
+                .add_textbox(std::format("`2{}`` invited you to access `w{}``.``", pPeer->growid, world->name))
+                .embed_data("world", world->name)
+                .embed_data("inviter", pPeer->growid)
+                .embed_data("inviter_uid", pPeer->user_id)
+                .add_spacer("small")
+                .add_button("accept", "`2Accept``")
+                .add_button("decline", "`4Decline``")
+                .end_dialog("worldlock_invite", "Close", "")
+        });
+
+        on::ConsoleMessage(event.peer, std::format("`oInvite sent to `2{}``.``", pTarget->growid));
+        log_event("worldlock_invite", std::format("{}({})", pPeer->growid, pPeer->user_id),
+            world->name, std::format("invitee={}({})", pTarget->growid, pTarget->user_id));
     }
 }
