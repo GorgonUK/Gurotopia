@@ -2,6 +2,7 @@
 #include "https/server_data.hpp"
 #include "proton/Variant.hpp"
 #include "tools/crypt.hpp"
+#include "tools/ip_tracker.hpp"
 
 #include "protocol.hpp"
 
@@ -10,6 +11,8 @@ void action::protocol(ENetEvent& event, const std::string& header)
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     try 
     {
+        if (ip_login_blocked(event.peer->address)) throw std::runtime_error("");
+
         std::vector<std::string> pipes = readch(header, '|');
         if (pipes.size() < 4ull) throw std::runtime_error("");
 
@@ -52,6 +55,8 @@ void action::protocol(ENetEvent& event, const std::string& header)
         if (!pPeer->mysql_load_progress())
             fprintf(stderr, "[peer] failed to load progress for %s\n", pPeer->growid.c_str());
 
+        ip_login_succeeded(event.peer->address);
+
         send_varlist(event.peer, {
             "OnSendToServer", 
             (int)gServer_data.port, 
@@ -63,6 +68,7 @@ void action::protocol(ENetEvent& event, const std::string& header)
         });
     }
     catch (...) { 
+        ip_login_failed(event.peer->address);
         send_action(*event.peer, "logon_fail", "");
         return; // @note stop processing invalid protocol data
     }
