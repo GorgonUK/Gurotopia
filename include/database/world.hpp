@@ -92,6 +92,19 @@ struct object
     u_int uid{};
 };
 
+/* one entry inside a mailbox, bulletin board or donation box tile */
+struct letter
+{
+    letter(int _uid, std::string _from, std::string _message, ::pos _pos, ::slot _im = {0, 0}) : 
+        uid(_uid), from(_from), message(_message), pos(_pos), im(_im) {}
+
+    int uid{}; // @note sender's user id
+    std::string from{}; // @note sender's growid, shown even when they're offline
+    std::string message{};
+    ::pos pos{}; // @note which tile this letter belongs to
+    ::slot im{0, 0}; // @note donation boxes only: the donated item
+};
+
 class world 
 {
 public:
@@ -114,6 +127,7 @@ public:
     std::vector<::door> doors{};
     std::vector<::display> displays{};
     std::vector<::random_block> random_blocks{};
+    std::vector<::letter> letters{}; // @note mailbox/bulletin/donation tile contents
 
     ::pos weather{};
 
@@ -127,6 +141,9 @@ extern int block_elapsed_seconds(std::time_t tick);
 
 /* plant/reset timestamp pre-aged for server.cfg growth_speed (offline-safe) */
 extern std::time_t growth_planted_tick(int grow_seconds);
+
+/* true while at least one Xenonite Crystal stands in the world (grants S_DOUBLE_JUMP) */
+extern bool world_has_xenonite(const ::world &world);
 
 extern bool world_save(const ::world &world);
 extern bool world_load(::world &world, const std::string &name);

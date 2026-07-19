@@ -15,12 +15,13 @@ using namespace std::literals::chrono_literals; // @note for 'ms' 's' (millisec,
 namespace
 {
     constexpr u_int WORLD_MAGIC = 0x44525747u; // 'GWRD'
-    constexpr u_short WORLD_VERSION = 1;
+    constexpr u_short WORLD_VERSION = 2; // @note v2 appends letters (mailbox/bulletin/donation)
     constexpr std::size_t WORLD_BLOCKS = 100ull * 60ull;
     constexpr std::size_t MAX_OBJECTS = 10000ull;
     constexpr std::size_t MAX_DOORS = 1000ull;
     constexpr std::size_t MAX_DISPLAYS = 1000ull;
     constexpr std::size_t MAX_RANDOM = 1000ull;
+    constexpr std::size_t MAX_LETTERS = 1000ull;
     constexpr std::size_t MAX_LABEL = 256ull;
 
     class ByteWriter
@@ -146,6 +147,18 @@ namespace
             w.write_f32(r.pos.y);
         }
 
+        w.write_u32(static_cast<u_int>(world.letters.size()));
+        for (const ::letter &l : world.letters)
+        {
+            w.write_i32(l.uid);
+            w.write_str(l.from);
+            w.write_str(l.message);
+            w.write_f32(l.pos.x);
+            w.write_f32(l.pos.y);
+            w.write_i16(l.im.id);
+            w.write_i16(l.im.count);
+        }
+
         return w.buf;
     }
 
@@ -154,7 +167,8 @@ namespace
         ByteReader r{ blob.data(), blob.size(), 0 };
         if (r.read_u32() != WORLD_MAGIC)
             throw std::runtime_error("bad world magic");
-        if (r.read_u16() != WORLD_VERSION)
+        const u_short version = r.read_u16();
+        if (version < 1 || version > WORLD_VERSION)
             throw std::runtime_error("unsupported world version");
 
         for (int &id : world.access)
@@ -231,6 +245,25 @@ namespace
             world.random_blocks.emplace_back(value, ::pos{x, y});
         }
 
+        world.letters.clear();
+        if (version >= 2)
+        {
+            u_int letter_count = r.read_u32();
+            if (letter_count > MAX_LETTERS)
+                throw std::runtime_error("too many letters");
+            for (u_int i = 0; i < letter_count; ++i)
+            {
+                int uid = r.read_i32();
+                std::string from = r.read_str(32);
+                std::string message = r.read_str();
+                float x = r.read_f32();
+                float y = r.read_f32();
+                short im_id = r.read_i16();
+                short im_count = r.read_i16();
+                world.letters.emplace_back(uid, std::move(from), std::move(message), ::pos{x, y}, ::slot{im_id, im_count});
+            }
+        }
+
         if (r.pos != r.size)
             throw std::runtime_error("trailing world blob data");
     }
@@ -263,6 +296,14 @@ std::time_t growth_planted_tick(int grow_seconds)
         now -= static_cast<std::time_t>(offset);
     }
     return now;
+}
+
+bool world_has_xenonite(const ::world &world)
+{
+    return std::ranges::any_of(world.blocks, [](const ::block &block) 
+    { 
+        return block.fg != 0 && id_to_item(block.fg).type == type::XENONITE; 
+    });
 }
 
 bool world_save(const ::world &world)
@@ -611,6 +652,7 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
             data[pos++] = '\0';
             break;
         }
+        case type::MAILBOX: // @note mailbox reuses the sign extra, matching join_request
         case type::SIGN:
         {
             short len = block.label.length();
@@ -621,6 +663,38 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
             *reinterpret_cast<short*>(&data[pos]) = len; pos += sizeof(short);
             for (const char &c : block.label) data[pos++] = c;
             *reinterpret_cast<int*>(&data[pos]) = 0xffffffff; pos += sizeof(int);
+            break;
+        }
+        case type::BULLETIN:
+        case type::DONATION_BOX:
+        {
+            data.resize(pos + 1ull + 6ull + 1ull); // @note {1} 00 00 00 00 00 00 {1}
+
+            data[pos++] = (item.type == type::BULLETIN) ? 0x07 : 0x0c;
+            *reinterpret_cast<short*>(&data[pos]) = 0; pos += sizeof(short); // @note 3 empty strings
+            *reinterpret_cast<short*>(&data[pos]) = 0; pos += sizeof(short);
+            *reinterpret_cast<short*>(&data[pos]) = 0; pos += sizeof(short);
+            data[pos++] = 0x00; // @note flags
+            break;
+        }
+        case type::XENONITE:
+        {
+            data.resize(pos + 1ull + 1ull + 4ull);
+
+            data[pos++] = 0x12;
+            data[pos++] = 0x00; // @note flags
+            *reinterpret_cast<u_int*>(&data[pos]) = 0; pos += sizeof(u_int); // @note flags2
+            break;
+        }
+        case type::SPIRIT_BOARD:
+        {
+            data.resize(pos + 1ull + 4ull + 4ull + 4ull);
+
+            data[pos++] = 0x44;
+            *reinterpret_cast<int*>(&data[pos]) = 0; pos += sizeof(int); // @note player count
+            *reinterpret_cast<short*>(&data[pos]) = 0; pos += sizeof(short); // @note 2 empty strings
+            *reinterpret_cast<short*>(&data[pos]) = 0; pos += sizeof(short);
+            *reinterpret_cast<u_int*>(&data[pos]) = 0; pos += sizeof(u_int); // @note item count
             break;
         }
         case type::SEED:
