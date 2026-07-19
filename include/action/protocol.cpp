@@ -49,6 +49,8 @@ void action::protocol(ENetEvent& event, const std::string& header)
             if (!password_verify(plaintext, pPeer->password)) throw std::runtime_error("");
         }
         pPeer->mysql_select_all();
+        if (!pPeer->mysql_load_progress())
+            fprintf(stderr, "[peer] failed to load progress for %s\n", pPeer->growid.c_str());
 
         send_varlist(event.peer, {
             "OnSendToServer", 

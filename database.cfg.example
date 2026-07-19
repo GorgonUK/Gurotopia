@@ -1,0 +1,4 @@
+# Example MariaDB connection — copy to database.cfg and edit.
+host|127.0.0.1
+user|gurotopia
+password|change_me

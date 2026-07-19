@@ -1,0 +1,41 @@
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: gurotopia
+      MYSQL_USER: gurotopia
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
+    volumes:
+      - gurotopia-db:/var/lib/mysql
+    ports:
+      # optional: expose for local tools; remove in public VPS if unused
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  server:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "17091:17091/udp"
+      - "443:443/tcp"
+    volumes:
+      # Persist / override runtime files without rebuilding the image
+      - ./deploy/database.cfg:/app/database.cfg:ro
+      - ./deploy/server.cfg:/app/server.cfg:ro
+      - ./deploy/server_data.php:/app/server_data.php:ro
+      - ./deploy/items.dat:/app/items.dat:ro
+      - ./resources:/app/resources:ro
+    environment:
+      LD_LIBRARY_PATH: /app/include/mysql/lib:/app/include/enet/lib
+
+volumes:
+  gurotopia-db:

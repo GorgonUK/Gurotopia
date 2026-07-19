@@ -1,9 +1,6 @@
 #include "pch.hpp"
 #include "ageworld.hpp"
 
-using namespace std::chrono;
-using namespace std::literals::chrono_literals; // @note for 'ms' 's' (millisec, seconds)
-
 void ageworld(ENetEvent& event, const std::string_view text)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
@@ -11,15 +8,18 @@ void ageworld(ENetEvent& event, const std::string_view text)
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;
 
-    std::vector<block> &blocks = world->blocks;
+    std::vector<::block> &blocks = world->blocks;
     for (std::size_t i = 0ull; i < blocks.size(); ++i)
     {
-        block &block = blocks[i];
-        auto item = std::ranges::find(items, block.fg, &::item::id); // @todo reduce iteration
+        ::block &block = blocks[i];
+        const ::item &item = id_to_item(block.fg);
         
-        if (item->type == type::PROVIDER || item->type == type::SEED) // @todo
+        if (item.type == type::PROVIDER || item.type == type::SEED) // @todo
         {
-            block.tick -= 86400s;
+            if (block.tick > 86400)
+                block.tick -= 86400;
+            else
+                block.tick = 0;
             send_tile_update(event, 
             {
                 .id = block.fg, 
@@ -27,4 +27,5 @@ void ageworld(ENetEvent& event, const std::string_view text)
             }, block, *world);
         }
     }
+    world->mark_dirty();
 }

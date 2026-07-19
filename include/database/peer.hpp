@@ -1,8 +1,7 @@
 #pragma once
 
-#include <array>
-#include <cmath>
-#include <deque>
+#include <cmath> // @note std::floor
+#include <deque> // @note std::deque
 #include <functional>
 
 enum bgra : u_int
@@ -86,6 +85,11 @@ public:
     T    mysql_select(const std::string &column, const std::string &arg = "");
     void mysql_select_all();
 
+    /* load/save progression (inventory, gems, clothing, level, favs, ...) */
+    bool mysql_load_progress();
+    bool mysql_save_progress();
+    void mark_dirty() { dirty = true; }
+
     int user_id{}; // @note unqiue user id.
     std::string growid{""}, password{""};
     std::time_t created_at{}; // @note when inserted in SQL (account age)
@@ -139,7 +143,13 @@ public:
 
     u_short fires_removed{};
     u_short gbc_pity{}; // @note GBC pity; for each 100 will receive super GBC
+
+    bool dirty{}; // @note needs DB flush
+    bool inventory_initialized{}; // @note true after DB load or starter-kit grant
 };
+
+extern void autosave_peers();
+extern void save_all_peers();
 
 extern ENetHost* host;
 
@@ -179,22 +189,6 @@ public:
     float idk{};
     ::pos punch{}; // @note punching/placing position 2D {x, y}
     u_int size{};
-};
-
-enum packet_pos : std::size_t
-{
-    P_INIT,
-    P_TYPE       = 4ull,
-    P_NETID      = P_TYPE*2ull,
-    P_UID        = P_TYPE*3ull,
-    P_PEER_STATE = P_TYPE*4ull,
-    P_COUNT      = P_TYPE*5ull,
-    P_ID         = P_TYPE*6ull,
-    P_POS        = P_TYPE*7ull, // @note 8 bit
-    P_SPEED      = P_TYPE*9ull, // @note 8 bit
-    P_IDK        = P_TYPE*11ull,
-    P_PUNCH      = P_TYPE*12ull, // @note 8 bit
-    P_SIZE       = P_TYPE*14ull
 };
 
 extern state get_state(const std::vector<u_char> &&packet);

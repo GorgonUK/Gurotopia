@@ -71,7 +71,7 @@
 
 ---
 
-### ![](https://raw.githubusercontent.com/microsoft/vscode-icons/main/icons/dark/settings.svg) Local Server Configuration
+# Local Server Configuration
 
 > [!NOTE]
 > To connect to your local server, you must modify your system's **hosts** file.
@@ -82,3 +82,30 @@
 > 127.0.0.1 www.growtopia1.com
 > 127.0.0.1 www.growtopia2.com
 > ```
+
+### Growth speed
+
+Edit `server.cfg` (created on first run, or copy `server.cfg.example`):
+
+```
+growth_speed|10
+```
+
+`10` = trees and providers mature **10× faster** than normal. Use `1` for stock timing.
+
+### Docker deploy (portable)
+
+1. Copy runtime files into `deploy/`:
+   ```bash
+   cp deploy/database.cfg.example deploy/database.cfg
+   cp deploy/server.cfg.example deploy/server.cfg
+   cp deploy/server_data.php.example deploy/server_data.php
+   # copy items.dat into deploy/items.dat
+   ```
+2. Set `server_data.php` → `server|<machine-ip>` (LAN or public).
+3. Run:
+   ```bash
+   docker compose up -d --build
+   ```
+
+Ports: UDP `17091` (game), TCP `443` (`server_data.php`). MariaDB data lives in the `gurotopia-db` volume.
