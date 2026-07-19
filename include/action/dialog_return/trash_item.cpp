@@ -1,5 +1,6 @@
 #include "pch.hpp"
 #include "on/ConsoleMessage.hpp"
+#include "tools/logger.hpp"
 
 #include "trash_item.hpp"
 
@@ -19,4 +20,6 @@ void trash_item(ENetEvent& event, const ::hPipe &hPipe)
 
     modify_item_inventory(event, ::slot(itemID, -count));
     on::ConsoleMessage(event.peer, std::format("{} `w{}`` recycled, `w0`` gems earned.", count, item.raw_name));
+    log_event("trash", std::format("{}({})", pPeer->growid, pPeer->user_id),
+        pPeer->recent_worlds.back(), std::format("item={} ({}) count={}", itemID, item.raw_name, count));
 }

@@ -1,5 +1,6 @@
 #include "pch.hpp"
 
+#include "tools/logger.hpp"
 #include "drop_item.hpp"
 
 void drop_item(ENetEvent& event, const ::hPipe &hPipe)
@@ -21,4 +22,6 @@ void drop_item(ENetEvent& event, const ::hPipe &hPipe)
 
     float x_nabor = (pPeer->facing_left) ? pPeer->pos.x - 32 : pPeer->pos.x + 32; // @note peer's naboring tile (drop position)
     add_drop(event, {itemID, count}, {x_nabor, pPeer->pos.y}, *world);
+    log_event("drop", std::format("{}({})", pPeer->growid, pPeer->user_id), world->name,
+        std::format("item={} count={}", itemID, count));
 }

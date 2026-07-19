@@ -11,6 +11,7 @@
 #include "action/join_request.hpp"
 #include "database/server_config.hpp"
 #include "item_activate_object.hpp"
+#include "tools/logger.hpp"
 
 #include "tile_change.hpp"
 
@@ -334,6 +335,8 @@ void tile_change(ENetEvent& event, state state)
 
                 pPeer->add_xp(event, std::trunc(1.0f + item.rarity / 5.0f));
             }
+            log_event("break", std::format("{}({})", pPeer->growid, pPeer->user_id), world->name,
+                std::format("item={} at {},{}", item.id, state.punch.x_int(), state.punch.y_int()));
         } // @note delete im, id
         else if (item.cloth_type != clothing::none) 
         {
@@ -767,6 +770,8 @@ void tile_change(ENetEvent& event, state state)
 
             // @note push elapsed after placing so the client countdown matches growth_speed
             push_growth = (item.type == type::SEED || item.type == type::PROVIDER);
+            log_event("place", std::format("{}({})", pPeer->growid, pPeer->user_id), world->name,
+                std::format("item={} at {},{}", item.id, state.punch.x_int(), state.punch.y_int()));
         }
         // @note common tail: sends the tile-change visual for BOTH breaking and placing
         ::pos affected = state.punch;

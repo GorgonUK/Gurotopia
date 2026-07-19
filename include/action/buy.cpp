@@ -3,6 +3,7 @@
 #include "on/SetBux.hpp"
 #include "database/shouhin.hpp"
 #include "tools/ransuu.hpp"
+#include "tools/logger.hpp"
 #include "buy.hpp"
 
 
@@ -148,6 +149,9 @@ void action::buy(ENetEvent& event, const std::string& header, const std::string_
                 on::SetBux(event);
             }
             else modify_item_inventory(event, ::slot(growtoken->id, -growtoken_cost));
+            log_event("buy", std::format("{}({})", pPeer->growid, pPeer->user_id),
+                pPeer->recent_worlds.back(),
+                std::format("item={} cost={}", shouhin.btn, (_tab < 5) ? shouhin.cost : growtoken_cost));
             break;
         }
     }

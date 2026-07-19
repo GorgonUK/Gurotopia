@@ -20,3 +20,6 @@ deploy/items.dat
 
 # machine handoff bundle (contains VPS credentials, never commit)
 handoff/
+
+# in-game action logs (bind-mounted from Docker)
+logs/

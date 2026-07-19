@@ -1,6 +1,7 @@
 #include "pch.hpp"
 #include "commands/__command.hpp"
 #include "on/ConsoleMessage.hpp"
+#include "tools/logger.hpp"
 #include "input.hpp"
 
 using namespace std::chrono;
@@ -77,5 +78,7 @@ void action::input(ENetEvent& event, const std::string& header)
             send_varlist(&p, { "OnTalkBubble", pPeer->netid, player_chat });
             on::ConsoleMessage(&p, message);
         });
+        log_event("chat", std::format("{}({})", pPeer->growid, pPeer->user_id),
+            pPeer->recent_worlds.back(), text);
     }
 }

@@ -7,6 +7,7 @@
 #include "on/ConsoleMessage.hpp"
 #include "commands/weather.hpp"
 #include "tools/ransuu.hpp"
+#include "tools/logger.hpp"
 
 #include "join_request.hpp"
 
@@ -84,15 +85,20 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
                         if (!is_tile_lock(block.fg)) world.is_public = (block.state[2] & S_PUBLIC); // @note check if world lock has S_PUBLIC flag, i will change this later
 
                         int access = std::ranges::count_if(world.access, std::identity{});
-                        data.resize(data.size() + 1ull + 1ull + 4ull + 4ull + (access * 4ull));
+                        data.resize(data.size() + 1ull + 1ull + 4ull + 4ull + 4ull + (access * 4ull));
                         w_data = data.data() + offset;
 
                         *w_data++ = 0x03;
                         *w_data++ = world.lock_state;
                         *reinterpret_cast<int*>(w_data) = world.owner; w_data += sizeof(int);
                         *reinterpret_cast<int*>(w_data) = access; w_data += sizeof(int);
-                        // @todo minimal level
-                        /* @todo access list */
+                        *reinterpret_cast<int*>(w_data) = 0; w_data += sizeof(int); // @note settings / minimal level padding
+                        for (int uid : world.access)
+                            if (uid)
+                            {
+                                *reinterpret_cast<int*>(w_data) = uid;
+                                w_data += sizeof(int);
+                            }
                         break;
                     }
                     case type::MAIN_DOOR: 
@@ -314,6 +320,8 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
         ++world.visitors;
         on::SetClothing(*event.peer);
         on::CountryState(event);
+        log_event("world_enter", std::format("{}({})", pPeer->growid, pPeer->user_id), world.name,
+            std::format("visitors={}", world.visitors));
     }
     catch (const std::exception& exc)
     {
