@@ -1,6 +1,36 @@
 #include "pch.hpp"
+#include "on/ConsoleMessage.hpp"
+#include "action/quit_to_exit.hpp"
+#include "database/world_ban.hpp"
 
 #include "popup.hpp"
+
+/* 
+* @brief find a peer in pPeer's world by netid. moderation targets (pull/kick/ban) are 
+* only valid when the clicker owns the world and the target is a regular player.
+* @return nullptr when not found or not allowed.
+*/
+static ENetPeer *find_moderation_target(ENetEvent &event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+    auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
+    if (world == worlds.end() || world->owner != pPeer->user_id) return nullptr;
+
+    const short netid = atoi(hPipe["netID"].c_str());
+    ENetPeer *target{};
+    peers(world->name, PEER_SAME_WORLD, [netid, &target](ENetPeer &peer)
+    {
+        ::peer *pOthers = static_cast<::peer*>(peer.data);
+        if (pOthers->netid == netid) target = &peer;
+    });
+    if (target == nullptr) return nullptr;
+
+    ::peer *pTarget = static_cast<::peer*>(target->data);
+    if (pTarget->user_id == world->owner || pTarget->role) return nullptr;
+
+    return target;
+}
 
 void popup(ENetEvent& event, const ::hPipe &hPipe)
 {
@@ -71,5 +101,62 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
     else if (hPipe["buttonClicked"] == "seed_diary_customization")
     {
         send_varlist(event.peer, { "OnDialogRequestRML", "show_seed_diary_ui" });
+    }
+    else if (hPipe["buttonClicked"] == "pull_player")
+    {
+        ENetPeer *target = find_moderation_target(event, hPipe);
+        if (target == nullptr) return;
+        ::peer *pTarget = static_cast<::peer*>(target->data);
+
+        send_varlist(target, {
+            "OnSetPos", 
+            CL_Vec2f{pPeer->pos.x, pPeer->pos.y}
+        }, pTarget->netid);
+        pTarget->pos = pPeer->pos;
+
+        const std::string message = std::format("`{}{}`` pulls `{}{}``.", pPeer->prefix, pPeer->growid, pTarget->prefix, pTarget->growid);
+        peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [message](ENetPeer& peer) 
+        {
+            on::ConsoleMessage(&peer, message);
+        });
+    }
+    else if (hPipe["buttonClicked"] == "kick_player")
+    {
+        ENetPeer *target = find_moderation_target(event, hPipe);
+        if (target == nullptr) return;
+        ::peer *pTarget = static_cast<::peer*>(target->data);
+
+        /* @note same visuals as action::respawn, but aimed at the target */
+        send_varlist(target, { "OnSetFreezeState", 2 }, pTarget->netid);
+        send_varlist(target, { "OnKilled" }, pTarget->netid);
+        send_varlist(target, {
+            "OnSetPos", 
+            CL_Vec2f{pTarget->rest_pos.x, pTarget->rest_pos.y}
+        }, pTarget->netid, 1900);
+        send_varlist(target, { "OnSetFreezeState" }, pTarget->netid, 1900);
+
+        const std::string message = std::format("`{}{}`` kicks `{}{}``.", pPeer->prefix, pPeer->growid, pTarget->prefix, pTarget->growid);
+        peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [message](ENetPeer& peer) 
+        {
+            on::ConsoleMessage(&peer, message);
+        });
+    }
+    else if (hPipe["buttonClicked"] == "worldban_player")
+    {
+        ENetPeer *target = find_moderation_target(event, hPipe);
+        if (target == nullptr) return;
+        ::peer *pTarget = static_cast<::peer*>(target->data);
+
+        world_ban_add(pPeer->recent_worlds.back(), pTarget->user_id);
+
+        const std::string message = std::format("`{}{}`` world bans `{}{}``.", pPeer->prefix, pPeer->growid, pTarget->prefix, pTarget->growid);
+        peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [message](ENetPeer& peer) 
+        {
+            on::ConsoleMessage(&peer, message);
+        });
+
+        on::ConsoleMessage(target, "`oYou've been `4banned`` from the world for 10 minutes!``");
+        ENetEvent fake{ .peer = target };
+        action::quit_to_exit(fake, "", false); // @note back to world select
     }
 }

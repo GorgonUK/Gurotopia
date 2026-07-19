@@ -7,6 +7,7 @@
 #include "on/ConsoleMessage.hpp"
 #include "commands/weather.hpp"
 #include "tools/ransuu.hpp"
+#include "database/world_ban.hpp"
 
 #include "join_request.hpp"
 
@@ -22,6 +23,12 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
         std::string big_name{header.size() < 2 ? world_name : readch(header, '|')[3]};
         if (!alnum(big_name)) throw std::runtime_error("Sorry, spaces and special characters are not allowed in world or door names.  Try again.");
         std::for_each(big_name.begin(), big_name.end(), [](char& c) { c = std::toupper(c); }); // @note start -> START
+
+        if (!pPeer->role && world_banned(big_name, pPeer->user_id))
+        {
+            on::ConsoleMessage(event.peer, std::format("`oYou're still `4banned`` from `w{}``!``", big_name));
+            throw std::runtime_error("");
+        }
         
         auto it = std::ranges::find(worlds, big_name, &::world::name);
         if (it == worlds.end()) 
