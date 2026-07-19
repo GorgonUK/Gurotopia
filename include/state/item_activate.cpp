@@ -2,6 +2,7 @@
 #include "on/SetClothing.hpp"
 #include "commands/punch.hpp"
 #include "on/ConsoleMessage.hpp"
+#include "action/dialog_return/magplant.hpp"
 
 #include "item_activate.hpp"
 
@@ -26,6 +27,29 @@ void item_activate(ENetEvent& event, state state)
 
         send_varlist(event.peer, { "OnEquipNewItem", state.id }, pPeer->netid);
         on::SetClothing(*event.peer); // @todo
+    }
+    else if (item.type == type::MAGPLANT_REMOTE)
+    {
+        // @note open the first Magplant in this world the peer can edit
+        auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
+        if (world == worlds.end() || world->magplants.empty())
+        {
+            send_varlist(event.peer, { "OnTextOverlay", "No Magplant found in this world." });
+            return;
+        }
+
+        const bool can_edit = !world->owner || pPeer->role || pPeer->user_id == world->owner ||
+            std::ranges::find(world->access, pPeer->user_id) != world->access.end();
+        if (!can_edit)
+        {
+            send_varlist(event.peer, { "OnTextOverlay", "Only the world owner can use this Magplant Remote." });
+            return;
+        }
+
+        ::magplant &mag = world->magplants.front();
+        ::block &block = world->blocks[cord(mag.pos.x_int(), mag.pos.y_int())];
+        const ::item &mag_item = id_to_item(block.fg);
+        magplant_dialog(event, ::state{ .punch = mag.pos }, *world, mag_item);
     }
     else 
     {

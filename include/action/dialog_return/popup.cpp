@@ -4,6 +4,7 @@
 #include "database/world_ban.hpp"
 #include "database/achievements.hpp"
 #include "tools/create_dialog.hpp"
+#include "database/quests.hpp"
 #include "surgery.hpp"
 
 #include "popup.hpp"
@@ -104,6 +105,10 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
     else if (hPipe["buttonClicked"] == "seed_diary_customization")
     {
         send_varlist(event.peer, { "OnDialogRequestRML", "show_seed_diary_ui" });
+    }
+    else if (hPipe["buttonClicked"] == "goals")
+    {
+        quest_dialog(event); // @note same as /quest
     }
     else if (hPipe["buttonClicked"] == "alist")
     {

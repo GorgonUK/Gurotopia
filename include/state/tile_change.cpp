@@ -11,6 +11,9 @@
 #include "action/quit_to_exit.hpp"
 #include "action/join_request.hpp"
 #include "action/dialog_return/letter_box.hpp"
+#include "action/dialog_return/display_edit.hpp"
+#include "action/dialog_return/vending.hpp"
+#include "action/dialog_return/magplant.hpp"
 #include "database/server_config.hpp"
 #include "database/achievements.hpp"
 #include "database/quests.hpp"
@@ -265,6 +268,49 @@ void tile_change(ENetEvent& event, state state)
 
             if (item.type == type::MAILBOX || item.type == type::BULLETIN || item.type == type::DONATION_BOX)
                 std::erase_if(world->letters, [&state](const ::letter &letter) { return letter.pos == state.punch; }); // @note broken box drops its contents into the void
+
+            if (item.type == type::DISPLAY_BLOCK)
+            {
+                auto display = std::ranges::find(world->displays, state.punch, &::display::pos);
+                if (display != world->displays.end())
+                {
+                    if (display->id != 0)
+                        add_drop(event, ::slot(static_cast<short>(display->id), 1), state.punch.by_32(), *world);
+                    world->displays.erase(display);
+                }
+            }
+
+            if (item.type == type::VENDING_MACHINE)
+            {
+                auto vend = std::ranges::find(world->vendings, state.punch, &::vending::pos);
+                if (vend != world->vendings.end())
+                {
+                    while (vend->count > 0)
+                    {
+                        short give = std::min(vend->count, static_cast<u_short>(200));
+                        add_drop(event, ::slot(static_cast<short>(vend->id), give), state.punch.by_32(), *world);
+                        vend->count = static_cast<u_short>(vend->count - give);
+                    }
+                    if (vend->earned > 0)
+                        add_drop(event, ::slot(242, vend->earned), state.punch.by_32(), *world);
+                    world->vendings.erase(vend);
+                }
+            }
+
+            if (item.type == type::MAGPLANT)
+            {
+                auto mag = std::ranges::find(world->magplants, state.punch, &::magplant::pos);
+                if (mag != world->magplants.end())
+                {
+                    while (mag->count > 0 && mag->id != 0)
+                    {
+                        short give = std::min(mag->count, static_cast<u_short>(200));
+                        add_drop(event, ::slot(static_cast<short>(mag->id), give), state.punch.by_32(), *world);
+                        mag->count = static_cast<u_short>(mag->count - give);
+                    }
+                    world->magplants.erase(mag);
+                }
+            }
 
             if (item.type == type::XENONITE && !world_has_xenonite(*world))
             {
@@ -663,7 +709,7 @@ void tile_change(ENetEvent& event, state state)
                 }
                 case type::DISPLAY_BLOCK:
                 {
-                    // @todo
+                    display_edit_dialog(event, state, *world, item);
                     break;
                 }
                 case type::MAILBOX:
@@ -675,21 +721,12 @@ void tile_change(ENetEvent& event, state state)
                 }
                 case type::VENDING_MACHINE:
                 {
-                    send_varlist(event.peer, {
-                        "OnDialogRequest",
-                        ::create_dialog()
-                            .set_default_color("`o")
-                            .add_label_with_icon("big", std::format("`w{}``", item.raw_name), item.id)
-                            .add_spacer("small")
-                            .embed_data("tilex", state.punch.x)
-                            .embed_data("tiley", state.punch.y)
-                            .add_textbox("This machine is empty.")
-                            .add_item_picker("stockitem", "`wPut an item in``", "Choose an item to put in the machine!")
-                            .add_smalltext("Upgrade to a DigiVend Machine for `44,000 Gems``.")
-                            .add_button("upgradedigital", "Upgrade to DigiVend")
-                            .add_spacer("small")
-                            .end_dialog("vending", "Close", "")
-                    });
+                    vending_dialog(event, state, *world, item);
+                    break;
+                }
+                case type::MAGPLANT:
+                {
+                    magplant_dialog(event, state, *world, item);
                     break;
                 }
             }
@@ -704,7 +741,17 @@ void tile_change(ENetEvent& event, state state)
                 {
                     case type::DISPLAY_BLOCK:
                     {
-                        world->displays.emplace_back(::display(item.id, state.punch));
+                        auto display = std::ranges::find(world->displays, state.punch, &::display::pos);
+                        if (display != world->displays.end() && display->id != 0)
+                            throw std::runtime_error("There's already something in this Display Block.");
+                        if (item.cat & CAT_UNTRADEABLE)
+                            throw std::runtime_error("That item can't go in a Display Block.");
+                        if (display == world->displays.end())
+                            world->displays.emplace_back(::display(item.id, state.punch));
+                        else
+                            display->id = item.id;
+                        modify_item_inventory(event, ::slot(item.id, -1));
+                        world->mark_dirty();
                         update_tile = true;
                         break;
                     }
@@ -799,6 +846,18 @@ void tile_change(ENetEvent& event, state state)
                         on::SetClothing(p);
                         on::ConsoleMessage(&p, "`9The Xenonite Crystal empowers everyone in the world!``");
                     });
+                    break;
+                }
+                case type::VENDING_MACHINE:
+                {
+                    if (std::ranges::find(world->vendings, state.punch, &::vending::pos) == world->vendings.end())
+                        world->vendings.emplace_back(state.punch);
+                    break;
+                }
+                case type::MAGPLANT:
+                {
+                    if (std::ranges::find(world->magplants, state.punch, &::magplant::pos) == world->magplants.end())
+                        world->magplants.emplace_back(state.punch);
                     break;
                 }
             }

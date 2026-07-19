@@ -74,6 +74,32 @@ struct display
     ::pos pos{};
 };
 
+/* vending machine stock — price >0 = WL per item, price <0 = |price| items per 1 WL */
+struct vending
+{
+    vending(::pos _pos = {}, u_short _id = 0, u_short _count = 0, int _price = 0, u_short _earned = 0) :
+        pos(_pos), id(_id), count(_count), price(_price), earned(_earned) {}
+
+    ::pos pos{};
+    u_short id{};
+    u_short count{};
+    int price{};
+    u_short earned{}; // @note World Locks waiting for owner withdraw
+};
+
+/* Magplant 5000 storage — sucks matching drops when enabled */
+struct magplant
+{
+    magplant(::pos _pos = {}, u_short _id = 0, u_short _count = 0, bool _enabled = false) :
+        pos(_pos), id(_id), count(_count), enabled(_enabled) {}
+
+    ::pos pos{};
+    u_short id{};    // @note filter item (0 = unset)
+    u_short count{};
+    bool enabled{};  // @note collecting drops
+    static constexpr u_short CAPACITY = 5000;
+};
+
 struct random_block
 {
     random_block(u_char _value, ::pos _pos) : value(_value), pos(_pos) {}
@@ -126,6 +152,8 @@ public:
     std::vector<::object> objects{};
     std::vector<::door> doors{};
     std::vector<::display> displays{};
+    std::vector<::vending> vendings{};
+    std::vector<::magplant> magplants{};
     std::vector<::random_block> random_blocks{};
     std::vector<::letter> letters{}; // @note mailbox/bulletin/donation tile contents
 

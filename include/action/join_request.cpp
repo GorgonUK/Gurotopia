@@ -226,9 +226,28 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
                         w_data = data.data() + offset;
 
                         *w_data++ = 0x18;
-                        *reinterpret_cast<u_int*>(w_data) = 0; w_data += sizeof(u_int); // @note item's ID
-                        *reinterpret_cast<int*>(w_data) = 0; w_data += sizeof(int); // @note world locks per item (or item(s) per world lock)
+                        auto vend = std::ranges::find(world.vendings, ::pos{i % x, i / x}, &::vending::pos);
+                        *reinterpret_cast<u_int*>(w_data) = (vend != world.vendings.end()) ? vend->id : 0;
+                        w_data += sizeof(u_int);
+                        *reinterpret_cast<int*>(w_data) = (vend != world.vendings.end()) ? vend->price : 0;
+                        w_data += sizeof(int);
+                        break;
+                    }
+                    case type::MAGPLANT:
+                    {
+                        data.resize(data.size() + 1ull + 4ull + 4ull + 1ull + 1ull + 2ull);
+                        w_data = data.data() + offset;
 
+                        *w_data++ = 0x3e;
+                        auto mag = std::ranges::find(world.magplants, ::pos{i % x, i / x}, &::magplant::pos);
+                        *reinterpret_cast<u_int*>(w_data) = (mag != world.magplants.end()) ? mag->id : 0;
+                        w_data += sizeof(u_int);
+                        *reinterpret_cast<u_int*>(w_data) = (mag != world.magplants.end()) ? mag->count : 0;
+                        w_data += sizeof(u_int);
+                        *w_data++ = (mag != world.magplants.end() && mag->enabled) ? 1 : 0;
+                        *w_data++ = 0;
+                        *reinterpret_cast<u_short*>(w_data) = ::magplant::CAPACITY;
+                        w_data += sizeof(u_short);
                         break;
                     }
                     case type::FISH_TANK_PORT:
@@ -286,7 +305,10 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
             }
             w_data += 12; // @todo
 
-            *reinterpret_cast<u_int*>(w_data) = world.last_object_uid; w_data += sizeof(u_int);
+            // @note first field is the object COUNT the client will parse, second is the
+            // last-drop uid baseline. writing last_object_uid for both desyncs the client
+            // once worlds persist (uid counter > objects actually present).
+            *reinterpret_cast<u_int*>(w_data) = static_cast<u_int>(world.objects.size()); w_data += sizeof(u_int);
             *reinterpret_cast<u_int*>(w_data) = world.last_object_uid; w_data += sizeof(u_int);
             for (const ::object &object : world.objects) 
             {

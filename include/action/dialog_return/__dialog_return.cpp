@@ -13,6 +13,9 @@
 #include "letter_box.hpp"
 #include "quest_menu.hpp"
 #include "surgery.hpp"
+#include "display_edit.hpp"
+#include "vending.hpp"
+#include "magplant.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -41,4 +44,8 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
 
     {"quest_menu", std::bind(&quest_menu, std::placeholders::_1, std::placeholders::_2)},
     {"surgery", std::bind(&surgery, std::placeholders::_1, std::placeholders::_2)},
+
+    {"display_edit", std::bind(&display_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"vending", std::bind(&vending_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"magplant_edit", std::bind(&magplant_edit, std::placeholders::_1, std::placeholders::_2)},
 };

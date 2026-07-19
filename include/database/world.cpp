@@ -15,11 +15,13 @@ using namespace std::literals::chrono_literals; // @note for 'ms' 's' (millisec,
 namespace
 {
     constexpr u_int WORLD_MAGIC = 0x44525747u; // 'GWRD'
-    constexpr u_short WORLD_VERSION = 2; // @note v2 appends letters (mailbox/bulletin/donation)
+    constexpr u_short WORLD_VERSION = 3; // @note v3 appends vendings + magplants
     constexpr std::size_t WORLD_BLOCKS = 100ull * 60ull;
     constexpr std::size_t MAX_OBJECTS = 10000ull;
     constexpr std::size_t MAX_DOORS = 1000ull;
     constexpr std::size_t MAX_DISPLAYS = 1000ull;
+    constexpr std::size_t MAX_VENDINGS = 1000ull;
+    constexpr std::size_t MAX_MAGPLANTS = 500ull;
     constexpr std::size_t MAX_RANDOM = 1000ull;
     constexpr std::size_t MAX_LETTERS = 1000ull;
     constexpr std::size_t MAX_LABEL = 256ull;
@@ -91,7 +93,8 @@ namespace
         if (world.blocks.size() != WORLD_BLOCKS)
             throw std::runtime_error("invalid block count");
         if (world.objects.size() > MAX_OBJECTS || world.doors.size() > MAX_DOORS ||
-            world.displays.size() > MAX_DISPLAYS || world.random_blocks.size() > MAX_RANDOM)
+            world.displays.size() > MAX_DISPLAYS || world.vendings.size() > MAX_VENDINGS ||
+            world.magplants.size() > MAX_MAGPLANTS || world.random_blocks.size() > MAX_RANDOM)
             throw std::runtime_error("world collection too large");
 
         ByteWriter w;
@@ -157,6 +160,27 @@ namespace
             w.write_f32(l.pos.y);
             w.write_i16(l.im.id);
             w.write_i16(l.im.count);
+        }
+
+        w.write_u32(static_cast<u_int>(world.vendings.size()));
+        for (const ::vending &v : world.vendings)
+        {
+            w.write_f32(v.pos.x);
+            w.write_f32(v.pos.y);
+            w.write_u16(v.id);
+            w.write_u16(v.count);
+            w.write_i32(v.price);
+            w.write_u16(v.earned);
+        }
+
+        w.write_u32(static_cast<u_int>(world.magplants.size()));
+        for (const ::magplant &m : world.magplants)
+        {
+            w.write_f32(m.pos.x);
+            w.write_f32(m.pos.y);
+            w.write_u16(m.id);
+            w.write_u16(m.count);
+            w.write_u8(m.enabled ? 1 : 0);
         }
 
         return w.buf;
@@ -261,6 +285,38 @@ namespace
                 short im_id = r.read_i16();
                 short im_count = r.read_i16();
                 world.letters.emplace_back(uid, std::move(from), std::move(message), ::pos{x, y}, ::slot{im_id, im_count});
+            }
+        }
+
+        world.vendings.clear();
+        world.magplants.clear();
+        if (version >= 3)
+        {
+            u_int vending_count = r.read_u32();
+            if (vending_count > MAX_VENDINGS)
+                throw std::runtime_error("too many vendings");
+            for (u_int i = 0; i < vending_count; ++i)
+            {
+                float x = r.read_f32();
+                float y = r.read_f32();
+                u_short id = r.read_u16();
+                u_short count = r.read_u16();
+                int price = r.read_i32();
+                u_short earned = r.read_u16();
+                world.vendings.emplace_back(::pos{x, y}, id, count, price, earned);
+            }
+
+            u_int magplant_count = r.read_u32();
+            if (magplant_count > MAX_MAGPLANTS)
+                throw std::runtime_error("too many magplants");
+            for (u_int i = 0; i < magplant_count; ++i)
+            {
+                float x = r.read_f32();
+                float y = r.read_f32();
+                u_short id = r.read_u16();
+                u_short count = r.read_u16();
+                bool enabled = r.read_u8() != 0;
+                world.magplants.emplace_back(::pos{x, y}, id, count, enabled);
             }
         }
 
@@ -576,6 +632,27 @@ void remove_object(ENetEvent& event, signed uid)
 int add_object(ENetEvent& event, ::slot slot, const ::pos& pos, ::world &world)
 {
     world.mark_dirty();
+
+    // @note Magplant suck: enabled plants with a matching filter absorb drops
+    for (::magplant &mag : world.magplants)
+    {
+        if (!mag.enabled || mag.id == 0 || mag.id != static_cast<u_short>(slot.id))
+            continue;
+        if (mag.count >= ::magplant::CAPACITY)
+            continue;
+
+        const u_short room = static_cast<u_short>(::magplant::CAPACITY - mag.count);
+        const u_short take = std::min(static_cast<u_short>(slot.count), room);
+        mag.count = static_cast<u_short>(mag.count + take);
+        slot.count = static_cast<short>(slot.count - take);
+
+        ::block &mag_block = world.blocks[cord(mag.pos.x_int(), mag.pos.y_int())];
+        send_tile_update(event, ::state{ .punch = mag.pos }, mag_block, world);
+
+        if (slot.count <= 0)
+            return 0;
+    }
+
     /* @todo got a little messy */
     auto object = std::ranges::find_if(world.objects, [&](const ::object &object) {
         return object.id == slot.id && (object.pos.by_32(true) == pos.by_32(true));
@@ -720,7 +797,36 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
             auto display = std::ranges::find(world.displays, state.punch, &::display::pos);
 
             data[pos++] = 0x17;
-            *reinterpret_cast<int*>(&data[pos]) = display->id; pos += sizeof(int);
+            *reinterpret_cast<int*>(&data[pos]) = (display != world.displays.end()) ? display->id : 0;
+            pos += sizeof(int);
+            break;
+        }
+        case type::VENDING_MACHINE:
+        {
+            data.resize(pos + 1ull + 4ull + 4ull);
+            auto vend = std::ranges::find(world.vendings, state.punch, &::vending::pos);
+
+            data[pos++] = 0x18;
+            *reinterpret_cast<u_int*>(&data[pos]) = (vend != world.vendings.end()) ? vend->id : 0;
+            pos += sizeof(u_int);
+            *reinterpret_cast<int*>(&data[pos]) = (vend != world.vendings.end()) ? vend->price : 0;
+            pos += sizeof(int);
+            break;
+        }
+        case type::MAGPLANT:
+        {
+            data.resize(pos + 1ull + 4ull + 4ull + 1ull + 1ull + 2ull);
+            auto mag = std::ranges::find(world.magplants, state.punch, &::magplant::pos);
+
+            data[pos++] = 0x3e; // @note TILE_EXTRA magplant
+            *reinterpret_cast<u_int*>(&data[pos]) = (mag != world.magplants.end()) ? mag->id : 0;
+            pos += sizeof(u_int);
+            *reinterpret_cast<u_int*>(&data[pos]) = (mag != world.magplants.end()) ? mag->count : 0;
+            pos += sizeof(u_int);
+            data[pos++] = (mag != world.magplants.end() && mag->enabled) ? 1 : 0;
+            data[pos++] = 0; // @note magnetron
+            *reinterpret_cast<u_short*>(&data[pos]) = ::magplant::CAPACITY;
+            pos += sizeof(u_short);
             break;
         }
     }
