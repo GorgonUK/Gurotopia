@@ -4,6 +4,7 @@
 
 #include <openssl/err.h>
 #include <csignal>
+#include <cstdlib>
 
 #ifdef _WIN32
     #include <winsock2.h>
@@ -137,15 +138,30 @@ void https::listener()
         }
         if (SSL_accept(ssl) > 0)
         {
-            char buf[213]; // @note size of growtopia's POST request.
-            const int length{ sizeof(buf) };
-
-            if (SSL_read(ssl, buf, length) == length)
+            /* @note read the full request (headers + body). the client sends the body
+               in a separate packet, so we must drain it before closing — otherwise
+               close() emits a TCP RST that discards the response we sent. */
+            std::string content;
+            char buf[1024];
+            for (int read = 0; (read = SSL_read(ssl, buf, sizeof(buf))) > 0; )
             {
-                puts(buf);
-                std::string content = std::string(buf, length);
-                
-                if (content.find("POST /growtopia/server_data.php HTTP/1.1") != std::string_view::npos)
+                content.append(buf, read);
+
+                const std::size_t header_end = content.find("\r\n\r\n");
+                if (header_end == std::string::npos) continue; // @note headers incomplete
+
+                std::size_t need = 0;
+                if (const std::size_t cl = content.find("Content-Length:"); cl != std::string::npos)
+                    need = std::strtoul(content.c_str() + cl + 15, nullptr, 10);
+
+                if (content.size() - (header_end + 4) >= need) break; // @note full body received
+            }
+
+            if (!content.empty())
+            {
+                puts(content.c_str());
+
+                if (content.find("POST /growtopia/server_data.php") != std::string_view::npos)
                 {
                     SSL_write(ssl, response.c_str(), response.size());
                 }
