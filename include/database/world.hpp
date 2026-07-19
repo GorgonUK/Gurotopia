@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ctime>
+
 enum wstate3 : u_char
 {
     S_RIGHT =  0x00,
@@ -38,16 +40,16 @@ enum lock_state : u_char
 struct block 
 {
     block(short _fg = 0, short _bg = 0, 
-        std::chrono::steady_clock::time_point _tick = std::chrono::steady_clock::time_point(),
+        std::time_t _tick = 0,
         std::string _label = "", u_char s3 = 0, u_char s4 = 0
-    ) : fg(_fg), bg(_bg), tick(_tick), label(_label), state(0, 0, s3, s4) {}
+    ) : fg(_fg), bg(_bg), tick(_tick), label(_label), state{0, 0, s3, s4} {}
     
     short fg{0}, bg{0};
     
-    std::chrono::steady_clock::time_point tick{}; // @note record a point in time for the tile e.g. tree growth, providers, ect.
+    std::time_t tick{}; // @note unix epoch seconds for tree growth, providers, etc.
     std::string label{}; // @note sign/door label @todo store in seperate class
 
-    u_char state[4];
+    u_char state[4]{};
 
     u_char hits[2] = {0, 0}; // @note fg, bg
 };
@@ -114,8 +116,22 @@ public:
     std::vector<::random_block> random_blocks{};
 
     ::pos weather{};
+
+    bool dirty{}; // @note needs DB flush
+    void mark_dirty() { dirty = true; }
 };
 extern std::vector<world> worlds;
+
+/* seconds elapsed since plant/provider tick (offline-safe) */
+extern int block_elapsed_seconds(std::time_t tick);
+
+/* plant/reset timestamp pre-aged for server.cfg growth_speed (offline-safe) */
+extern std::time_t growth_planted_tick(int grow_seconds);
+
+extern bool world_save(const ::world &world);
+extern bool world_load(::world &world, const std::string &name);
+extern void autosave_worlds();
+extern void save_all_worlds();
 
 extern void send_action(ENetPeer& p, const std::string& action, const std::string& str);
 

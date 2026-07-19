@@ -9,12 +9,24 @@
 #include "tools/create_dialog.hpp"
 #include "action/quit_to_exit.hpp"
 #include "action/join_request.hpp"
+#include "database/server_config.hpp"
 #include "item_activate_object.hpp"
 
 #include "tile_change.hpp"
 
 using namespace std::chrono;
 using namespace std::literals::chrono_literals; // @note for 'ms' 's' (millisec, seconds)
+
+static void add_gem_drops(ENetEvent &event, int base_gems, const ::pos &pos, ::world &world)
+{
+    int gems = std::max(1, static_cast<int>(
+        std::lround(static_cast<double>(base_gems) * gServer_config.gem_drop_multiplier)
+    ));
+
+    for (short denomination : {100, 50, 10, 5, 1})
+        for (; gems >= denomination; gems -= denomination)
+            add_drop(event, {112, denomination}, pos, world);
+}
 
 void tile_change(ENetEvent& event, state state) 
 {
@@ -41,6 +53,7 @@ void tile_change(ENetEvent& event, state state)
                 (pPeer->user_id != world->owner && std::ranges::find(world->access, pPeer->user_id) == world->access.end())) return;
 
         bool lock_visuals{}; // @todo this looks sloppy
+        bool push_growth{};  // @note true after placing a seed/provider (refresh growth countdown)
         
         if (state.id == 18) // @note punching a block
         {
@@ -130,16 +143,14 @@ void tile_change(ENetEvent& event, state state)
                 }
                 case type::PROVIDER:
                 {
-                    if ((steady_clock::now() - block.tick) / 1s >= item.tick)
+                    if (block_elapsed_seconds(block.tick) >= item.tick)
                     {
                         switch (item.id)
                         {
                             case 1008: // @note ATM
                             {
-                                u_char gems = ransuu[{1, 100}]; // @note source: https://growtopia.fandom.com/wiki/ATM_Machine
-                                for (short i : {100, 50, 10, 5, 1}/* gem type */)
-                                    for (; gems >= i; gems -= i/* downgrade type */)
-                                        add_drop(event, {112, i}, state.punch.by_32(), *world);
+                                int gems = ransuu[{1, 100}]; // @note source: https://growtopia.fandom.com/wiki/ATM_Machine
+                                add_gem_drops(event, gems, state.punch.by_32(), *world);
                                         
                                 break;
                             }
@@ -169,7 +180,7 @@ void tile_change(ENetEvent& event, state state)
                                 break;
                             }
                         }
-                        block.tick = steady_clock::now();
+                        block.tick = growth_planted_tick(item.tick);
                         send_tile_update(event, std::move(state), block, *world); // @note update countdown on provider.
 
                         pPeer->add_xp(event, 1);
@@ -179,10 +190,16 @@ void tile_change(ENetEvent& event, state state)
                 }
                 case type::SEED:
                 {
-                    if ((steady_clock::now() - block.tick) / 1s >= item.tick) // @todo limit this check.
+                    if (block_elapsed_seconds(block.tick) >= item.tick) // @todo limit this check.
                     {
                         block.hits[0] = 99;
                         add_drop(event, ::slot(item.id - 1, ransuu[{2, 12}]), state.punch.by_32(), *world); // @note fruit (from tree)
+                    }
+                    else
+                    {
+                        // @note not ready yet — refresh the growth_speed countdown, don't break early
+                        send_tile_update(event, state, block, *world);
+                        return;
                     }
                     break;
                 }
@@ -302,15 +319,18 @@ void tile_change(ENetEvent& event, state state)
 
                     if (!ransuu[{0, (rarity_to_gem > 1) ? 1 : 4}]) // @note double chances if farmable.
                     {
-                        /* @todo merge gems more effectively */
-                        u_char gems = ransuu[{1, rarity_to_gem}];
-                        for (short i : {10, 5, 1}/* gem type */)
-                            for (; gems >= i; gems -= i/* downgrade type */)
-                                add_drop(event, {112, i}, state.punch.by_32(), *world);
+                        int gems = ransuu[{1, rarity_to_gem}];
+                        add_gem_drops(event, gems, state.punch.by_32(), *world);
                     }
                     if (!ransuu[{0, (rarity_to_gem > 1) ? 2 : 4}]) add_drop(event, ::slot(item.id + 1, 1), state.punch.by_32(), *world); 
                     else if (!ransuu[{0, (rarity_to_gem > 1) ? 4 : 8}]) add_drop(event, ::slot(item.id, 1), state.punch.by_32(), *world);
-                } /* ~gem drop */
+                }
+                else
+                {
+                    // @note breaking a tree: chance to drop the seed (item.id is the seed)
+                    if (!ransuu[{0, 3}])
+                        add_drop(event, ::slot(item.id, 1), state.punch.by_32(), *world);
+                }
 
                 pPeer->add_xp(event, std::trunc(1.0f + item.rarity / 5.0f));
             }
@@ -675,7 +695,7 @@ void tile_change(ENetEvent& event, state state)
                                     0u,
                                     1u
                                 });
-                                block.tick = steady_clock::now();
+                                block.tick = growth_planted_tick(item.tick);
                                 block.fg = item.id;
                                 update_tile = true;
                                 break;
@@ -711,6 +731,7 @@ void tile_change(ENetEvent& event, state state)
                         {
                             std::ranges::rotate(pPeer->my_worlds, pPeer->my_worlds.begin() + 1);
                             pPeer->my_worlds.back() = world->name;
+                            pPeer->mark_dirty();
                         }
                         std::string placed_message = std::format("`5[```w{}`` has been `$World Locked`` by {}`5]``", world->name, pPeer->growid);
                         peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [&event, &pPeer, placed_message](ENetPeer& peer) 
@@ -729,22 +750,30 @@ void tile_change(ENetEvent& event, state state)
                 }
                 case type::PROVIDER:
                 {
-                    block.tick = steady_clock::now();
+                    block.tick = growth_planted_tick(item.tick);
                     break;
                 }
                 case type::SEED:
                 {
                     block.state[2] |= 0x11;
-                    block.tick = steady_clock::now();
+                    block.tick = growth_planted_tick(item.tick);
                     break;
                 }
             }
             block.state[2] |= (pPeer->facing_left) ? S_LEFT : S_RIGHT;
             (item.type == type::BACKGROUND) ? block.bg = state.id : block.fg = state.id;
             pPeer->emplace(::slot(item.id, -1));
+            world->mark_dirty();
+
+            // @note push elapsed after placing so the client countdown matches growth_speed
+            push_growth = (item.type == type::SEED || item.type == type::PROVIDER);
         }
+        // @note common tail: sends the tile-change visual for BOTH breaking and placing
+        ::pos affected = state.punch;
         state.netid = pPeer->netid; // @todo sometimes rgt has this as 0
         state_visuals(*event.peer, std::move(state)); // finished.
+        if (push_growth)
+            send_tile_update(event, ::state{ .punch = affected }, block, *world);
         if (lock_visuals) 
         {
             state_visuals(*event.peer, ::state{
@@ -752,7 +781,7 @@ void tile_change(ENetEvent& event, state state)
                 .netid = world->owner, 
                 .peer_state = peer_state::S_EXTENDED, 
                 .id = state.id,
-                .punch = state.punch
+                .punch = affected
             });
         }
     }

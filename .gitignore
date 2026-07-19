@@ -7,6 +7,13 @@ main.exe
 items.dat
 server_data.php
 database.cfg
+server.cfg
+
+# deploy secrets / machine-specific runtime (keep examples tracked)
+deploy/database.cfg
+deploy/server.cfg
+deploy/server_data.php
+deploy/items.dat
 
 # VSC user settings
 .vscode/settings.json

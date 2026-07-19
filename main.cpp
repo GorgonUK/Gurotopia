@@ -10,6 +10,7 @@
 #include "include/https/server_data.hpp" // @note gServer_data
 #include "include/database/database.hpp" // @note mysql_connect()
 #include "include/database/database_config.hpp" // @note load_database_config(), gDatabase_config
+#include "include/database/server_config.hpp" // @note load_server_config(), gServer_config
 #include "include/automate/holiday.hpp" // @note holiday
 #include <csignal>
 
@@ -47,16 +48,28 @@ int main()
     enet_host_compress_with_range_coder(host);
 
     gDb_config = load_database_config();
+    gServer_config = load_server_config();
+    printf("growth_speed=%.2fx\n", gServer_config.growth_speed);
     mysql_connect();
     decode_items();      // @note reads items.dat into legible class members (id, item name, ect)
     parse_store();       // @todo thread loop this so the store can update without restarting server (stored in .\resource\store.txt)
     check_for_holiday(); // @note check for any holidays using local time (your VPS or local time) - @todo thread loop so it can change the holiday without restarting
 
     ENetEvent event{};
+    auto last_autosave = std::chrono::steady_clock::now();
     while (!gSignal)
+    {
         while (enet_host_service(host, &event, 1000/*ms*/) > 0)
             if (const auto i = event_pool.find(event.type); i != event_pool.end())
                 i->second(event);
+
+        if (std::chrono::steady_clock::now() - last_autosave >= std::chrono::seconds(30))
+        {
+            autosave_peers();
+            autosave_worlds();
+            last_autosave = std::chrono::steady_clock::now();
+        }
+    }
 
     safe_disconnect_peers(gSignal);
     mysql_close(db);

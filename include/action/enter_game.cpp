@@ -12,11 +12,13 @@ void action::enter_game(ENetEvent& event, const std::string& header)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
-    if (pPeer->slots.empty()) // @note if peer has no items: assume they are a new player.
+    if (!pPeer->inventory_initialized) // @note brand-new account: grant starter kit once
     {
         pPeer->emplace({18, 1}); // @note Fist
         pPeer->emplace({32, 1}); // @note Wrench
         pPeer->emplace({9640, 1}); // @note My First World Lock
+        pPeer->inventory_initialized = true;
+        pPeer->mark_dirty();
     }
     pPeer->prefix = (pPeer->role == MODERATOR) ? "#@" : (pPeer->role == DEVELOPER) ? "8@" : pPeer->prefix;
     on::ConsoleMessage(event.peer, 

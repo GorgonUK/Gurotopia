@@ -85,6 +85,11 @@ public:
     T    mysql_select(const std::string &column, const std::string &arg = "");
     void mysql_select_all();
 
+    /* load/save progression (inventory, gems, clothing, level, favs, ...) */
+    bool mysql_load_progress();
+    bool mysql_save_progress();
+    void mark_dirty() { dirty = true; }
+
     int user_id{}; // @note unqiue user id.
     std::string growid{""}, password{""};
     std::time_t created_at{}; // @note when inserted in SQL (account age)
@@ -138,7 +143,13 @@ public:
 
     u_short fires_removed{};
     u_short gbc_pity{}; // @note GBC pity; for each 100 will receive super GBC
+
+    bool dirty{}; // @note needs DB flush
+    bool inventory_initialized{}; // @note true after DB load or starter-kit grant
 };
+
+extern void autosave_peers();
+extern void save_all_peers();
 
 extern ENetHost* host;
 

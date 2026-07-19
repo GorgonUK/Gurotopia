@@ -1,9 +1,6 @@
 #include "pch.hpp"
 #include "ageworld.hpp"
 
-using namespace std::chrono;
-using namespace std::literals::chrono_literals; // @note for 'ms' 's' (millisec, seconds)
-
 void ageworld(ENetEvent& event, const std::string_view text)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
@@ -19,7 +16,10 @@ void ageworld(ENetEvent& event, const std::string_view text)
         
         if (item.type == type::PROVIDER || item.type == type::SEED) // @todo
         {
-            block.tick -= 86400s;
+            if (block.tick > 86400)
+                block.tick -= 86400;
+            else
+                block.tick = 0;
             send_tile_update(event, 
             {
                 .id = block.fg, 
@@ -27,4 +27,5 @@ void ageworld(ENetEvent& event, const std::string_view text)
             }, block, *world);
         }
     }
+    world->mark_dirty();
 }

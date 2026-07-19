@@ -17,6 +17,12 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
         else if (pipes[i] == "user")         pPeer->user_id = std::stoi(pipes[i+1]); // @todo validate user_id
     }
 
+    // @note game-session peer is a fresh reconnect after OnSendToServer; the
+    // inventory/gems/progress loaded on the login peer was discarded, so load
+    // it again here (before enter_game grants the starter kit).
+    if (!pPeer->mysql_load_progress())
+        fprintf(stderr, "[peer] failed to load progress for %s\n", pPeer->growid.c_str());
+
     send_varlist(event.peer, { "OnOverrideGDPRFromServer", 18, 1, 0, 1 });
 
     /* v5.51 */

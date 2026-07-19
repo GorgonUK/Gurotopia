@@ -22,4 +22,5 @@ void action::itemfavourite(ENetEvent& event, const std::string& header)
     send_varlist(event.peer, { "OnFavItemUpdated", stoi(id), (fav) ? 0 : 1 });
     if (fav) pPeer->fav.erase(it);
     else pPeer->fav.emplace_back(stoi(id));
+    pPeer->mark_dirty();
 }

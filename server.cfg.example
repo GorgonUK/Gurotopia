@@ -1,0 +1,10 @@
+# Example server settings — copy to server.cfg and edit.
+# growth_speed: wall-clock multiplier for trees & providers.
+#   1  = normal Growtopia timing
+#   10 = 10x faster (default for this private server)
+growth_speed|10
+
+# gem_drop_multiplier: quantity awarded by each successful gem drop.
+#   1  = normal gem amount
+#   10 = 10x gems (default for this private server)
+gem_drop_multiplier|10

@@ -128,6 +128,7 @@ void action::buy(ENetEvent& event, const std::string& header, const std::string_
                 if (im.first == 9412) // @note 9412 is the id for increase backpack sprite, but peer wont actually be given that item.
                 {
                     pPeer->slot_size += 10;
+                    pPeer->mark_dirty();
                     send_inventory_state(event); // @note update the new slots
                 }
                 else modify_item_inventory(event, {im.first, im.second});
@@ -141,7 +142,11 @@ void action::buy(ENetEvent& event, const std::string& header, const std::string_
                     "You've purchased `0{}`` for `${}`` `2Growtokens``.\nYou have `${}`` `2Growtokens`` left.\n\n`5Received: ```0{}``",
                     shouhin.name, growtoken_cost, growtoken->count - growtoken_cost, received)
             });
-            if (_tab < 5) on::SetBux(event);
+            if (_tab < 5)
+            {
+                pPeer->mark_dirty();
+                on::SetBux(event);
+            }
             else modify_item_inventory(event, ::slot(growtoken->id, -growtoken_cost));
             break;
         }

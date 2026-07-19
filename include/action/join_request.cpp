@@ -27,7 +27,8 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
         if (it == worlds.end()) 
         {
             it = worlds.emplace(it, big_name);
-            generate_world(*it, big_name);
+            if (!world_load(*it, big_name))
+                generate_world(*it, big_name);
         }
         ::world &world = *it;
 
@@ -140,7 +141,7 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
 
                         *w_data++ = 0x04;
 
-                        *reinterpret_cast<u_int*>(w_data) = (steady_clock::now() - block.tick) / 1s; w_data += sizeof(u_int);
+                        *reinterpret_cast<u_int*>(w_data) = block_elapsed_seconds(block.tick); w_data += sizeof(u_int);
                         *w_data++ = 0x03; // @note fruit on tree
                         break;
                     }
@@ -151,7 +152,7 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
 
                         *w_data++ = 0x09;
 
-                        *reinterpret_cast<u_int*>(w_data) = (steady_clock::now() - block.tick) / 1s; w_data += sizeof(u_int);
+                        *reinterpret_cast<u_int*>(w_data) = block_elapsed_seconds(block.tick); w_data += sizeof(u_int);
                         break;
                     }
                     case type::WEATHER_MACHINE:
@@ -260,6 +261,7 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
 
             std::rotate(first, first + 1, pPeer->recent_worlds.end());
             pPeer->recent_worlds.back() = world.name;
+            pPeer->mark_dirty();
         } // @note delete name, first
         on::EmoticonDataChanged(event);
 

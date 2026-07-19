@@ -8,7 +8,12 @@
     #include <chrono>
     #include <thread>
     #include <vector>
+    #include <string>
+    #include <format>
+    #include <cstdio>
+    #include <ctime>
     #include <openssl/ssl.h>
+    #include <openssl/crypto.h>
 
     #include "proton/Variant.hpp"
     
