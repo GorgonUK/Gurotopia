@@ -56,7 +56,7 @@ void tile_change(ENetEvent& event, state state)
                 return; // @note avoid hitting the block
             }
 
-        if (state.id == 18 && try_fishing(event, state, block, *world)) return; // @note casting a Fishing Rod on water
+        if (try_fishing(event, state, block, *world)) return; // @note rod + bait on water (use bait or punch)
 
         if (!(item.cat & CAT_PUBLIC)) // @note if block is public skip validating if peer is owner or access
             if (!peer_can_edit_tile(pPeer, *world, state.punch)) return;
