@@ -933,6 +933,9 @@ void tile_change(ENetEvent& event, state state)
                 }
                 case type::VENDING_MACHINE:
                 {
+                    // @note real GT: vendings only work in World Locked worlds
+                    if (!world->owner)
+                        throw std::runtime_error("Vending Machines can only be placed in a `$World Locked`` world.");
                     if (std::ranges::find(world->vendings, state.punch, &::vending::pos) == world->vendings.end())
                         world->vendings.emplace_back(state.punch);
                     break;
