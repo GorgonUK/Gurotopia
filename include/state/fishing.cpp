@@ -112,7 +112,6 @@ namespace
         });
     }
 
-    /* occupied backpack slots — emptied entries (count 0) still linger in slots until save */
     std::size_t used_inventory_slots(const ::peer &peer)
     {
         return static_cast<std::size_t>(std::ranges::count_if(peer.slots, [](const ::slot &s) {
@@ -120,9 +119,16 @@ namespace
         }));
     }
 
-    void award_catch(ENetEvent &event, ::peer &pPeer, ::world &world, const ::pos &/*water_tile*/, short bait_id)
+    bool inventory_can_take(const ::peer &peer, short item_id)
     {
-        // @note bait is only taken on a successful catch
+        auto existing = std::ranges::find(peer.slots, item_id, &::slot::id);
+        if (existing != peer.slots.end() && existing->count > 0 && existing->count < 200)
+            return true;
+        return used_inventory_slots(peer) < static_cast<std::size_t>(peer.slot_size);
+    }
+
+    void award_catch(ENetEvent &event, ::peer &pPeer, ::world &world, short bait_id)
+    {
         auto has_bait = [&](short id) {
             auto it = std::ranges::find(pPeer.slots, id, &::slot::id);
             return it != pPeer.slots.end() && it->count > 0;
@@ -130,13 +136,8 @@ namespace
         if (!has_bait(bait_id))
             bait_id = bait_in_inventory(pPeer);
         if (bait_id == 0)
-        {
-            send_varlist(event.peer, {
-                "OnTalkBubble", pPeer.netid,
-                "`oYou need bait to keep that fish!``", 0u
-            });
-            return;
-        }
+            return; // @note no bait left — silent fail, no catch bubble
+
         modify_item_inventory(event, ::slot(bait_id, -1));
 
         ransuu rng;
@@ -149,12 +150,7 @@ namespace
             roll -= fish.weight;
             if (roll > 0) continue;
 
-            // @note inventory if there's room; otherwise drop beside the player (not in the water)
-            // @note count only slots with count > 0 — bait just consumed may leave a 0-count entry
-            auto existing = std::ranges::find(pPeer.slots, fish.id, &::slot::id);
-            const bool can_stack = existing != pPeer.slots.end() && existing->count < 200;
-            const bool can_new_slot = used_inventory_slots(pPeer) < static_cast<std::size_t>(pPeer.slot_size);
-            if (can_stack || can_new_slot)
+            if (inventory_can_take(pPeer, fish.id))
                 modify_item_inventory(event, ::slot(fish.id, 1));
             else
                 add_drop(event, ::slot(fish.id, 1), pPeer.pos, world);
@@ -204,11 +200,10 @@ namespace
 
         if (pPeer.fish_bite && steady_clock::now() <= pPeer.fish_bite_until)
         {
-            const ::pos tile = pPeer.fish_tile;
             const short bait = pPeer.fish_bait;
             clear_session(pPeer);
             broadcast_stop(event, pPeer);
-            award_catch(event, pPeer, world, tile, bait);
+            award_catch(event, pPeer, world, bait);
             return;
         }
 
@@ -225,8 +220,7 @@ void fishing_cancel(ENetEvent &event, const char *reason)
 
     clear_session(*pPeer);
     broadcast_stop(event, *pPeer);
-    if (reason != nullptr && reason[0] != '\0')
-        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, reason, 0u });
+    (void)reason; // @note bubbles only on successful catch
 }
 
 void fishing_tick()
@@ -244,7 +238,7 @@ void fishing_tick()
         if (!has_fishing_rod(*pPeer))
         {
             ENetEvent ev{ .peer = &peer };
-            fishing_cancel(ev); // @note silent — rod unequipped
+            fishing_cancel(ev);
             continue;
         }
 
@@ -288,46 +282,25 @@ bool try_fishing(ENetEvent &event, const ::state &state, ::block &block, ::world
             try_reel(event, *pPeer, world);
             return true;
         }
-        fishing_cancel(event); // @note silent — other action interrupts cast
+        fishing_cancel(event);
         return false; // @note let the new action proceed
     }
 
     if (!punching && !placing_bait) return false;
 
     if (!(block.state[3] & S_WATER))
-    {
-        if (placing_bait)
-        {
-            send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`oCast your bait onto water.``", 0u });
-            return true;
-        }
-        return false;
-    }
+        return placing_bait; // @note swallow bait place on land (no bubble)
+
     if (!has_fishing_rod(*pPeer))
-    {
-        if (placing_bait)
-        {
-            send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`oEquip a `2Fishing Rod`` first.``", 0u });
-            return true;
-        }
-        return false;
-    }
+        return placing_bait; // @note swallow bait place without rod
 
     // @note must stand on the water or a tile next to it (not 2+ blocks away)
     if (!in_cast_range(*pPeer, state.punch))
-    {
-        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`oToo far away...``", 0u });
         return true;
-    }
 
     short bait_id = placing_bait ? placed : bait_in_inventory(*pPeer);
     if (bait_id == 0)
-    {
-        // @note punch on water with rod but no bait — ignore (normal punch)
-        if (placing_bait)
-            send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`oYou need a `2Wiggly Worm`` (or other bait) to fish.``", 0u });
-        return placing_bait;
-    }
+        return placing_bait; // @note punch with no bait — ignore; bait place with none — swallow
 
     start_cast(event, *pPeer, bait_id, state.punch);
     return true;
