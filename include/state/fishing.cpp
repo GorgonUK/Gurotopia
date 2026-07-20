@@ -16,6 +16,9 @@ namespace
     /* baits accepted for casting (expand as more baits are supported) */
     constexpr std::array<short, 1ull> baits{ WIGGLY_WORM };
 
+    constexpr auto BITE_WINDOW = milliseconds(2500);
+    constexpr int SPLASH_CHANCE = 45; // @note percent per check after the wait
+
     struct fish
     {
         short id{};
@@ -46,7 +49,6 @@ namespace
         return static_cast<short>(peer.clothing[hand]) == FISHING_ROD;
     }
 
-    /* first bait stack in inventory, or 0 */
     short bait_in_inventory(const ::peer &peer)
     {
         for (short bait : baits)
@@ -56,6 +58,157 @@ namespace
                 return bait;
         }
         return 0;
+    }
+
+    void clear_session(::peer &peer)
+    {
+        peer.fishing = false;
+        peer.fish_bite = false;
+        peer.fish_tile = {};
+        peer.fish_bait = 0;
+        peer.fish_next_check = {};
+        peer.fish_bite_until = {};
+    }
+
+    /* cast visual — packet type 0x1F (fishing line) at the water tile */
+    void broadcast_cast(ENetEvent &event, const ::peer &peer, const ::pos &tile)
+    {
+        state_visuals(*event.peer, ::state{
+            .type = 0x1F,
+            .netid = peer.netid,
+            .punch = tile
+        });
+    }
+
+    void broadcast_splash(ENetPeer &/*peer*/, const ::peer &pPeer)
+    {
+        const ::pos pixel = pPeer.fish_tile.by_32();
+        peers(pPeer.recent_worlds.back(), PEER_SAME_WORLD, [&](ENetPeer &p)
+        {
+            ENetEvent pev{ .peer = &p };
+            send_particle_effect(pev, pixel, {0x00, 0x24}, 36); // @note splash particle (id 36)
+            send_varlist(&p, { "OnTalkBubble", pPeer.netid, "`9*splash!*``", 0u });
+        });
+    }
+
+    void award_catch(ENetEvent &event, ::peer &pPeer, ::world &world, const ::pos &tile)
+    {
+        ransuu rng;
+        int total_weight{};
+        for (const ::fish &fish : fish_table) total_weight += fish.weight;
+
+        int roll = rng[{1, total_weight}];
+        for (const ::fish &fish : fish_table)
+        {
+            roll -= fish.weight;
+            if (roll > 0) continue;
+
+            add_drop(event, ::slot(fish.id, 1), tile.by_32(), world);
+            pPeer.add_xp(event, fish.xp);
+            send_particle_effect(event, tile.by_32(), {0x00, 0x40});
+
+            const std::string message = std::format("`{}{}`` caught a `2{}``!",
+                pPeer.prefix, pPeer.growid, id_to_item(fish.id).raw_name);
+            peers(pPeer.recent_worlds.back(), PEER_SAME_WORLD, [&](ENetPeer &p)
+            {
+                send_varlist(&p, { "OnTalkBubble", pPeer.netid, message, 0u });
+            });
+            on::ConsoleMessage(event.peer, message);
+
+            achievement_progress(event, ACH_FISH_CAUGHT);
+            quest_progress(event, QUEST_CATCH_FISH);
+            break;
+        }
+    }
+
+    void start_cast(ENetEvent &event, ::peer &pPeer, short bait_id, const ::pos &tile)
+    {
+        ransuu rng;
+        modify_item_inventory(event, ::slot(bait_id, -1));
+
+        pPeer.fishing = true;
+        pPeer.fish_bite = false;
+        pPeer.fish_tile = tile;
+        pPeer.fish_bait = bait_id;
+        // @note first splash opportunity after 2–5s, then ~1s retries
+        pPeer.fish_next_check = steady_clock::now() + seconds(rng[{2, 5}]);
+        pPeer.fish_bite_until = {};
+
+        broadcast_cast(event, pPeer, tile);
+        send_varlist(event.peer, {
+            "OnTalkBubble", pPeer.netid,
+            "`oWaiting for a bite... punch when you see the splash!``", 0u
+        });
+    }
+
+    /* punch while already fishing — reel in if bite is up, else miss */
+    void try_reel(ENetEvent &event, ::peer &pPeer, ::world &world)
+    {
+        if (!pPeer.fishing) return;
+
+        if (pPeer.fish_bite && steady_clock::now() <= pPeer.fish_bite_until)
+        {
+            const ::pos tile = pPeer.fish_tile;
+            clear_session(pPeer);
+            award_catch(event, pPeer, world, tile);
+            return;
+        }
+
+        // @note punched too early (or after the window) — bait already spent
+        clear_session(pPeer);
+        send_varlist(event.peer, {
+            "OnTalkBubble", pPeer.netid,
+            "`oToo early! Sit still and wait for the splash.``", 0u
+        });
+    }
+}
+
+void fishing_cancel(ENetEvent &event, const char *reason)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    if (!pPeer->fishing) return;
+
+    clear_session(*pPeer);
+    if (reason && *reason)
+        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, reason, 0u });
+}
+
+void fishing_tick()
+{
+    ransuu rng;
+    const auto now = steady_clock::now();
+
+    for (ENetPeer &peer : std::span(host->peers, host->peerCount))
+    {
+        if (peer.state != ENET_PEER_STATE_CONNECTED || peer.data == nullptr) continue;
+        ::peer *pPeer = static_cast<::peer*>(peer.data);
+        if (!pPeer->fishing) continue;
+
+        if (pPeer->fish_bite)
+        {
+            if (now > pPeer->fish_bite_until)
+            {
+                // @note missed the window — fish swam off; another splash may come
+                pPeer->fish_bite = false;
+                pPeer->fish_next_check = now + seconds(rng[{2, 4}]);
+                send_varlist(&peer, {
+                    "OnTalkBubble", pPeer->netid,
+                    "`oThe fish got away... keep waiting.``", 0u
+                });
+            }
+            continue;
+        }
+
+        if (now < pPeer->fish_next_check) continue;
+
+        if (rng[{1, 100}] <= SPLASH_CHANCE)
+        {
+            pPeer->fish_bite = true;
+            pPeer->fish_bite_until = now + BITE_WINDOW;
+            broadcast_splash(peer, *pPeer);
+        }
+        else
+            pPeer->fish_next_check = now + milliseconds(rng[{800, 1600}]);
     }
 }
 
@@ -67,9 +220,20 @@ bool try_fishing(ENetEvent &event, const ::state &state, ::block &block, ::world
     const bool punching = (placed == 18);
     const bool placing_bait = is_bait(placed);
 
-    // @note real GT casts by using bait on water; we also allow fist-punch on water
-    // while holding a rod with bait in inventory (same outcome, consumes 1 bait).
+    // @note already casting — any punch tries to reel; other actions cancel
+    if (pPeer->fishing)
+    {
+        if (punching)
+        {
+            try_reel(event, *pPeer, world);
+            return true;
+        }
+        fishing_cancel(event, "`oYou stopped fishing.``");
+        return false; // @note let the new action proceed
+    }
+
     if (!punching && !placing_bait) return false;
+
     if (!(block.state[3] & S_WATER))
     {
         if (placing_bait)
@@ -92,49 +256,12 @@ bool try_fishing(ENetEvent &event, const ::state &state, ::block &block, ::world
     short bait_id = placing_bait ? placed : bait_in_inventory(*pPeer);
     if (bait_id == 0)
     {
-        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`oYou need a `2Wiggly Worm`` (or other bait) to fish.``", 0u });
-        return true;
+        // @note punch on water with rod but no bait — ignore (normal punch)
+        if (placing_bait)
+            send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`oYou need a `2Wiggly Worm`` (or other bait) to fish.``", 0u });
+        return placing_bait;
     }
 
-    if (steady_clock::now() - pPeer->last_cast < seconds(3))
-    {
-        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`oThe fish aren't biting yet...``", 0u });
-        return true;
-    }
-    pPeer->last_cast = steady_clock::now();
-
-    modify_item_inventory(event, ::slot(bait_id, -1));
-
-    ransuu ransuu;
-    if (ransuu[{0, 2}] == 0) // @note 1 in 3 casts comes up empty
-    {
-        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`oNot even a nibble.``", 0u });
-        return true;
-    }
-
-    int total_weight{};
-    for (const ::fish &fish : fish_table) total_weight += fish.weight;
-
-    int roll = ransuu[{1, total_weight}];
-    for (const ::fish &fish : fish_table)
-    {
-        roll -= fish.weight;
-        if (roll > 0) continue;
-
-        add_drop(event, ::slot(fish.id, 1), state.punch.by_32(), world);
-        pPeer->add_xp(event, fish.xp);
-        send_particle_effect(event, state.punch.by_32(), {0x00, 0x40});
-
-        const std::string message = std::format("`{}{}`` caught a `2{}``!", pPeer->prefix, pPeer->growid, id_to_item(fish.id).raw_name);
-        peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [pPeer, message](ENetPeer& peer)
-        {
-            send_varlist(&peer, { "OnTalkBubble", pPeer->netid, message, 0u });
-        });
-        on::ConsoleMessage(event.peer, message);
-
-        achievement_progress(event, ACH_FISH_CAUGHT);
-        quest_progress(event, QUEST_CATCH_FISH);
-        break;
-    }
+    start_cast(event, *pPeer, bait_id, state.punch);
     return true;
 }

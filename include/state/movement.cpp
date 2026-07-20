@@ -1,11 +1,21 @@
 #include "pch.hpp"
 #include "action/respawn.hpp"
+#include "fishing.hpp"
 
 #include "movement.hpp"
 
 void movement(ENetEvent& event, state state) 
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+    // @note moving cancels an active cast (bait already spent)
+    if (pPeer->fishing)
+    {
+        const ::pos tile = state.pos.by_32(true);
+        // @note allow tiny jitter on the same tile; leaving it cancels
+        if (tile != pPeer->pos.by_32(true))
+            fishing_cancel(event, "`oSit perfectly while fishing!``");
+    }
     
     pPeer->pos = state.pos;
     pPeer->facing_left = state.peer_state & peer_state::S_MOVE_LEFT;

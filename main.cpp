@@ -12,6 +12,7 @@
 #include "include/database/database_config.hpp" // @note load_database_config(), gDatabase_config
 #include "include/database/server_config.hpp" // @note load_server_config(), gServer_config
 #include "include/automate/holiday.hpp" // @note holiday
+#include "include/state/fishing.hpp" // @note fishing_tick()
 #include <csignal>
 
 namespace
@@ -62,6 +63,8 @@ int main()
         while (enet_host_service(host, &event, 1000/*ms*/) > 0)
             if (const auto i = event_pool.find(event.type); i != event_pool.end())
                 i->second(event);
+
+        fishing_tick(); // @note splash rolls / bite-window expiry (~1s when idle)
 
         if (std::chrono::steady_clock::now() - last_autosave >= std::chrono::seconds(30))
         {
