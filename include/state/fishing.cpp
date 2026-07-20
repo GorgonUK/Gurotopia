@@ -113,7 +113,7 @@ namespace
         });
     }
 
-    void award_catch(ENetEvent &event, ::peer &pPeer, ::world &world, const ::pos &tile, short bait_id)
+    void award_catch(ENetEvent &event, ::peer &pPeer, ::world &world, const ::pos &/*water_tile*/, short bait_id)
     {
         // @note bait is only taken on a successful catch
         auto has_bait = [&](short id) {
@@ -142,9 +142,17 @@ namespace
             roll -= fish.weight;
             if (roll > 0) continue;
 
-            add_drop(event, ::slot(fish.id, 1), tile.by_32(), world);
+            // @note inventory if there's room; otherwise drop beside the player (not in the water)
+            auto existing = std::ranges::find(pPeer.slots, fish.id, &::slot::id);
+            const bool can_stack = existing != pPeer.slots.end() && existing->count < 200;
+            const bool can_new_slot = pPeer.slots.size() < static_cast<std::size_t>(pPeer.slot_size);
+            if (can_stack || can_new_slot)
+                modify_item_inventory(event, ::slot(fish.id, 1));
+            else
+                add_drop(event, ::slot(fish.id, 1), pPeer.pos, world);
+
             pPeer.add_xp(event, fish.xp);
-            send_particle_effect(event, tile.by_32(), {0x00, 0x40});
+            send_particle_effect(event, pPeer.pos, {0x00, 0x40});
 
             const std::string message = std::format("`{}{}`` caught a `2{}``!",
                 pPeer.prefix, pPeer.growid, id_to_item(fish.id).raw_name);
@@ -158,6 +166,14 @@ namespace
             quest_progress(event, QUEST_CATCH_FISH);
             break;
         }
+    }
+
+    /* standing on the water tile or any neighbouring tile (Chebyshev distance <= 1) */
+    bool in_cast_range(const ::peer &peer, const ::pos &water_tile)
+    {
+        const ::pos stand = peer.pos.by_32(true);
+        return std::abs(stand.x_int() - water_tile.x_int()) <= 1
+            && std::abs(stand.y_int() - water_tile.y_int()) <= 1;
     }
 
     void start_cast(ENetEvent &event, ::peer &pPeer, short bait_id, const ::pos &tile)
@@ -302,6 +318,13 @@ bool try_fishing(ENetEvent &event, const ::state &state, ::block &block, ::world
             return true;
         }
         return false;
+    }
+
+    // @note must stand on the water or a tile next to it (not 2+ blocks away)
+    if (!in_cast_range(*pPeer, state.punch))
+    {
+        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, "`oToo far away...``", 0u });
+        return true;
     }
 
     short bait_id = placing_bait ? placed : bait_in_inventory(*pPeer);
