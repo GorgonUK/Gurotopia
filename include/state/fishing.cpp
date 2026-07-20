@@ -80,6 +80,16 @@ namespace
         });
     }
 
+    /* drop the cast line / unfreeze look for everyone in the world */
+    void broadcast_stop(ENetEvent &event, const ::peer &peer)
+    {
+        state_visuals(*event.peer, ::state{
+            .type = 0x00, // @note normal movement snapshot clears the cast pose
+            .netid = peer.netid,
+            .pos = peer.pos
+        });
+    }
+
     void broadcast_splash(ENetPeer &/*peer*/, const ::peer &pPeer)
     {
         const ::pos pixel = pPeer.fish_tile.by_32();
@@ -91,8 +101,25 @@ namespace
         });
     }
 
-    void award_catch(ENetEvent &event, ::peer &pPeer, ::world &world, const ::pos &tile)
+    void award_catch(ENetEvent &event, ::peer &pPeer, ::world &world, const ::pos &tile, short bait_id)
     {
+        // @note bait is only taken on a successful catch
+        auto has_bait = [&](short id) {
+            auto it = std::ranges::find(pPeer.slots, id, &::slot::id);
+            return it != pPeer.slots.end() && it->count > 0;
+        };
+        if (!has_bait(bait_id))
+            bait_id = bait_in_inventory(pPeer);
+        if (bait_id == 0)
+        {
+            send_varlist(event.peer, {
+                "OnTalkBubble", pPeer.netid,
+                "`oYou need bait to keep that fish!``", 0u
+            });
+            return;
+        }
+        modify_item_inventory(event, ::slot(bait_id, -1));
+
         ransuu rng;
         int total_weight{};
         for (const ::fish &fish : fish_table) total_weight += fish.weight;
@@ -124,7 +151,7 @@ namespace
     void start_cast(ENetEvent &event, ::peer &pPeer, short bait_id, const ::pos &tile)
     {
         ransuu rng;
-        modify_item_inventory(event, ::slot(bait_id, -1));
+        // @note do NOT consume bait here — only on a successful catch
 
         pPeer.fishing = true;
         pPeer.fish_bite = false;
@@ -141,7 +168,7 @@ namespace
         });
     }
 
-    /* punch while already fishing — reel in if bite is up, else miss */
+    /* punch while already fishing — reel in if bite is up, else cancel (no bait spent) */
     void try_reel(ENetEvent &event, ::peer &pPeer, ::world &world)
     {
         if (!pPeer.fishing) return;
@@ -149,16 +176,19 @@ namespace
         if (pPeer.fish_bite && steady_clock::now() <= pPeer.fish_bite_until)
         {
             const ::pos tile = pPeer.fish_tile;
+            const short bait = pPeer.fish_bait;
             clear_session(pPeer);
-            award_catch(event, pPeer, world, tile);
+            broadcast_stop(event, pPeer);
+            award_catch(event, pPeer, world, tile, bait);
             return;
         }
 
-        // @note punched too early (or after the window) — bait already spent
+        // @note punched too early / after the window — stop, keep bait
         clear_session(pPeer);
+        broadcast_stop(event, pPeer);
         send_varlist(event.peer, {
             "OnTalkBubble", pPeer.netid,
-            "`oToo early! Sit still and wait for the splash.``", 0u
+            "`oToo early! You reeled in empty-handed.``", 0u
         });
     }
 }
@@ -169,6 +199,7 @@ void fishing_cancel(ENetEvent &event, const char *reason)
     if (!pPeer->fishing) return;
 
     clear_session(*pPeer);
+    broadcast_stop(event, *pPeer);
     if (reason && *reason)
         send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, reason, 0u });
 }
@@ -184,11 +215,19 @@ void fishing_tick()
         ::peer *pPeer = static_cast<::peer*>(peer.data);
         if (!pPeer->fishing) continue;
 
+        // @note rod unequipped mid-cast (e.g. inventory race) — stop
+        if (!has_fishing_rod(*pPeer))
+        {
+            ENetEvent ev{ .peer = &peer };
+            fishing_cancel(ev, "`oYou put your rod away.``");
+            continue;
+        }
+
         if (pPeer->fish_bite)
         {
             if (now > pPeer->fish_bite_until)
             {
-                // @note missed the window — fish swam off; another splash may come
+                // @note missed the window — fish swam off; another splash may come (bait kept)
                 pPeer->fish_bite = false;
                 pPeer->fish_next_check = now + seconds(rng[{2, 4}]);
                 send_varlist(&peer, {

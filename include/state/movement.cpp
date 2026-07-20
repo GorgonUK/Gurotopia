@@ -8,12 +8,12 @@ void movement(ENetEvent& event, state state)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
-    // @note moving cancels an active cast (bait already spent)
+    // @note any real movement cancels fishing (must sit still)
     if (pPeer->fishing)
     {
-        const ::pos tile = state.pos.by_32(true);
-        // @note allow tiny jitter on the same tile; leaving it cancels
-        if (tile != pPeer->pos.by_32(true))
+        const float dx = state.pos.x - pPeer->pos.x;
+        const float dy = state.pos.y - pPeer->pos.y;
+        if (dx * dx + dy * dy > 16.0f) // @note ~4px — ignore tiny jitter / standing packets
             fishing_cancel(event, "`oSit perfectly while fishing!``");
     }
     
