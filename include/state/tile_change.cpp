@@ -46,6 +46,9 @@ void tile_change(ENetEvent& event, state state)
 
         ::block &block = world->blocks[cord(state.punch.x, state.punch.y)];
 
+        // @note before the empty-tile bail-out: punching bare water (fg/bg 0) must still reel / cast
+        if (try_fishing(event, state, block, *world)) return;
+
         const ::item &item = id_to_item((state.id != 32 && state.id != 18) ? state.id : (block.fg != 0) ? block.fg : block.bg);
         if (item.id == 0) return;
 
@@ -55,8 +58,6 @@ void tile_change(ENetEvent& event, state state)
                 remove_fire(event, state, block, *world);
                 return; // @note avoid hitting the block
             }
-
-        if (try_fishing(event, state, block, *world)) return; // @note rod + bait on water (use bait or punch)
 
         // @note guests may wrench public-interact tiles (buy from vending, etc.) without build rights
         const bool public_wrench =
