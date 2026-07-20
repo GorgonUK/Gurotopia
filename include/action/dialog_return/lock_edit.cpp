@@ -32,3 +32,27 @@ void lock_edit(ENetEvent& event, const ::hPipe &hPipe)
         .punch = pos
     }, block, *world);
 }
+
+void tile_lock_edit(ENetEvent &event, const ::hPipe &hPipe)
+{
+    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
+    if (world == worlds.end()) return;
+
+    const ::pos pos{ atoi(hPipe["tilex"].c_str()), atoi(hPipe["tiley"].c_str()) };
+    auto tl = std::ranges::find(world->tile_locks, pos, &::tile_lock::pos);
+    if (tl == world->tile_locks.end()) return;
+    if (!pPeer->role && pPeer->user_id != tl->owner) return;
+
+    tl->is_public = atoi(hPipe["checkbox_public"].c_str()) != 0;
+    world->mark_dirty();
+
+    ::block &block = world->blocks[cord(pos.x_int(), pos.y_int())];
+    if (tl->is_public) block.state[2] |= S_PUBLIC;
+    else block.state[2] &= ~S_PUBLIC;
+
+    on::ConsoleMessage(event.peer, std::format(
+        "`2{}`` set their `$Area Lock`` to {}``",
+        pPeer->growid, tl->is_public ? "`$PUBLIC" : "`4PRIVATE"));
+    send_tile_update(event, ::state{ .punch = pos }, block, *world);
+}

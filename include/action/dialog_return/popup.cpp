@@ -6,7 +6,7 @@
 #include "tools/create_dialog.hpp"
 #include "database/quests.hpp"
 #include "surgery.hpp"
-#include "gameplay_extra.hpp"
+#include "trade.hpp"
 
 #include "popup.hpp"
 

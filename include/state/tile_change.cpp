@@ -14,7 +14,7 @@
 #include "action/dialog_return/display_edit.hpp"
 #include "action/dialog_return/vending.hpp"
 #include "action/dialog_return/magplant.hpp"
-#include "action/dialog_return/gameplay_extra.hpp"
+#include "action/dialog_return/combiner.hpp"
 #include "database/server_config.hpp"
 #include "database/achievements.hpp"
 #include "database/quests.hpp"

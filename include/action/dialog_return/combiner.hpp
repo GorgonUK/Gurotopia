@@ -1,10 +1,6 @@
 #pragma once
 
-extern void tile_lock_edit(ENetEvent &event, const ::hPipe &hPipe);
-extern void trade_edit(ENetEvent &event, const ::hPipe &hPipe);
 extern void combiner_edit(ENetEvent &event, const ::hPipe &hPipe);
-
-extern void trade_dialog(ENetEvent &event, ENetPeer *target);
 extern void combiner_dialog(ENetEvent &event, const ::state &state, ::world &world, const ::item &item);
 
 /* punch on a chemical combiner: open<->close, swallowing/cooking drops on its tile */

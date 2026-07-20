@@ -16,7 +16,8 @@
 #include "display_edit.hpp"
 #include "vending.hpp"
 #include "magplant.hpp"
-#include "gameplay_extra.hpp"
+#include "trade.hpp"
+#include "combiner.hpp"
 
 #include "__dialog_return.hpp"
 
