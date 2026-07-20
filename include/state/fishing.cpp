@@ -158,8 +158,8 @@ namespace
             pPeer.add_xp(event, fish.xp);
             send_particle_effect(event, pPeer.pos, {0x00, 0x40});
 
-            const std::string message = std::format("`{}{}`` caught a `2{}``!",
-                pPeer.prefix, pPeer.growid, id_to_item(fish.id).raw_name);
+            const std::string message = std::format("You caught a `2{}``!",
+                id_to_item(fish.id).raw_name);
             send_varlist(event.peer, { "OnTalkBubble", pPeer.netid, message, 0u });
             on::ConsoleMessage(event.peer, message);
 
@@ -274,16 +274,11 @@ bool try_fishing(ENetEvent &event, const ::state &state, ::block &block, ::world
     const bool punching = (placed == 18);
     const bool placing_bait = is_bait(placed);
 
-    // @note already casting — any punch tries to reel; other actions cancel
+    // @note already casting — any click (fist or selected item) tries to reel; swallow so nothing is placed
     if (pPeer->fishing)
     {
-        if (punching)
-        {
-            try_reel(event, *pPeer, world);
-            return true;
-        }
-        fishing_cancel(event);
-        return false; // @note let the new action proceed
+        try_reel(event, *pPeer, world);
+        return true;
     }
 
     if (!punching && !placing_bait) return false;

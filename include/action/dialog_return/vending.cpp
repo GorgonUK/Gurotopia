@@ -72,21 +72,41 @@ void vending_dialog(ENetEvent &event, const ::state &state, ::world &world, cons
         return;
     }
 
-    if (vend.id == 0)
+    if (vend.id == 0 || vend.count == 0)
     {
-        send_varlist(event.peer, {
-            "OnDialogRequest",
-            ::create_dialog()
-                .set_default_color("`o")
-                .add_label_with_icon("big", std::format("`w{}``", item.raw_name), item.id)
+        // @note sold out / never stocked — no item line, no "Empty"; withdraw locks + restock only
+        if (vend.count == 0 && vend.id != 0)
+        {
+            vend.id = 0;
+            vend.price = 0;
+            world.mark_dirty();
+            send_tile_update(event, ::state{ .punch = state.punch },
+                world.blocks[cord(state.punch.x_int(), state.punch.y_int())], world);
+        }
+
+        ::create_dialog dialog;
+        dialog
+            .set_default_color("`o")
+            .add_label_with_icon("big", std::format("`w{}``", item.raw_name), item.id)
+            .add_spacer("small")
+            .embed_data("tilex", state.punch.x)
+            .embed_data("tiley", state.punch.y)
+            .add_textbox("This machine is empty.");
+
+        if (vend.earned > 0)
+        {
+            dialog
                 .add_spacer("small")
-                .embed_data("tilex", state.punch.x)
-                .embed_data("tiley", state.punch.y)
-                .add_textbox("This machine is empty.")
-                .add_item_picker("stockitem", "`wPut an item in``", "Choose an item to put in the machine!")
-                .add_spacer("small")
-                .end_dialog("vending", "Close", "")
-        });
+                .add_smalltext(std::format("You have earned {} World Locks.", vend.earned))
+                .add_button("withdraw", "Withdraw World Locks");
+        }
+
+        dialog
+            .add_spacer("small")
+            .add_item_picker("stockitem", "`wPut an item in``", "Choose an item to put in the machine!")
+            .add_spacer("small");
+
+        send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("vending", "Close", "") });
         return;
     }
 
@@ -209,7 +229,7 @@ void vending_edit(ENetEvent &event, const ::hPipe &hPipe)
         return;
     }
 
-    if (owner && clicked == "pullstocks" && vend.id != 0)
+    if (owner && clicked == "pullstocks" && vend.count > 0)
     {
         while (vend.count > 0)
         {
@@ -299,6 +319,11 @@ void vending_edit(ENetEvent &event, const ::hPipe &hPipe)
         }
 
         vend.earned = static_cast<u_short>(std::min(65535, static_cast<int>(vend.earned) + wl_cost));
+        if (vend.count == 0)
+        {
+            vend.id = 0;
+            vend.price = 0;
+        }
         refresh();
         on::ConsoleMessage(event.peer, "`2Purchase complete!``");
     }
