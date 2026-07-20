@@ -573,17 +573,20 @@ void send_inventory_state(ENetEvent &event)
         .peer_state = peer_state::S_EXTENDED
     });
 
-    std::size_t size = pPeer->slots.size();
-    data.resize(data.size() + 5ull + (size * sizeof(int)));
+    // @note inventory payload begins at byte 58 (overlaps the last 2 bytes of the
+    // 60-byte tank header). Needs: 2 ints (slot_size, count) + N slot ints.
+    // The old `+5` left the buffer 1 byte short and corrupted the heap on free.
+    const std::size_t size = pPeer->slots.size();
+    data.resize(58ull + sizeof(int) * (2ull + size));
 
     int *i32 = reinterpret_cast<int*>(&data[58ull]);
 
 #ifdef _WIN32
     *i32++ = _byteswap_ulong(pPeer->slot_size);
-    *i32++ = _byteswap_ulong(size);
+    *i32++ = _byteswap_ulong(static_cast<u_int>(size));
 #else // @note linux
     *i32++ = __builtin_bswap32(pPeer->slot_size);
-    *i32++ = __builtin_bswap32(size);
+    *i32++ = __builtin_bswap32(static_cast<u_int>(size));
 #endif
     for (const ::slot &slot : pPeer->slots)
         *i32++ = slot.id | (slot.count & 0xff) << 16;
