@@ -1066,10 +1066,12 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
             data.resize(pos + 1ull + 4ull + 4ull);
             auto vend = std::ranges::find(world.vendings, state.punch, &::vending::pos);
 
+            // @note client shows the stocked item only while count>0 and price!=0; else "out of order"
+            const bool for_sale = vend != world.vendings.end() && vend->count > 0 && vend->price != 0;
             data[pos++] = 0x18;
-            *reinterpret_cast<u_int*>(&data[pos]) = (vend != world.vendings.end()) ? vend->id : 0;
+            *reinterpret_cast<u_int*>(&data[pos]) = for_sale ? vend->id : 0;
             pos += sizeof(u_int);
-            *reinterpret_cast<int*>(&data[pos]) = (vend != world.vendings.end()) ? vend->price : 0;
+            *reinterpret_cast<int*>(&data[pos]) = for_sale ? vend->price : 0;
             pos += sizeof(int);
             break;
         }
@@ -1094,7 +1096,7 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
     peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [&](ENetPeer& p) 
     {
-        send_data(p, std::move(data));
+        send_data(p, std::vector<u_char>(data)); // @note copy — move would empty after the first peer
     });
 }
 

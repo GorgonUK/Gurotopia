@@ -229,9 +229,11 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
 
                         *w_data++ = 0x18;
                         auto vend = std::ranges::find(world.vendings, ::pos{i % x, i / x}, &::vending::pos);
-                        *reinterpret_cast<u_int*>(w_data) = (vend != world.vendings.end()) ? vend->id : 0;
+                        // @note empty / unpriced machines render as out of order on the client
+                        const bool for_sale = vend != world.vendings.end() && vend->count > 0 && vend->price != 0;
+                        *reinterpret_cast<u_int*>(w_data) = for_sale ? vend->id : 0;
                         w_data += sizeof(u_int);
-                        *reinterpret_cast<int*>(w_data) = (vend != world.vendings.end()) ? vend->price : 0;
+                        *reinterpret_cast<int*>(w_data) = for_sale ? vend->price : 0;
                         w_data += sizeof(int);
                         break;
                     }

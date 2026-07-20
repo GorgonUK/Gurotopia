@@ -58,7 +58,11 @@ void tile_change(ENetEvent& event, state state)
 
         if (try_fishing(event, state, block, *world)) return; // @note rod + bait on water (use bait or punch)
 
-        if (!(item.cat & CAT_PUBLIC)) // @note if block is public skip validating if peer is owner or access
+        // @note guests may wrench public-interact tiles (buy from vending, etc.) without build rights
+        const bool public_wrench =
+            state.id == 32 && item.type == type::VENDING_MACHINE;
+
+        if (!(item.cat & CAT_PUBLIC) && !public_wrench) // @note if block is public skip validating if peer is owner or access
             if (!peer_can_edit_tile(pPeer, *world, state.punch)) return;
 
         bool lock_visuals{}; // @todo this looks sloppy
