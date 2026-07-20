@@ -19,6 +19,7 @@ struct achievement
     std::string_view description{};
     u_int goal{};
     u_short reward_gems{};
+    u_short icon{}; // badge icon for earned add_achieve rows
 };
 extern const std::array<::achievement, ACH_COUNT> achievements;
 

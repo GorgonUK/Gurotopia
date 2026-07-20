@@ -15,6 +15,7 @@ struct quest_type
     std::string_view noun{};
     u_int min{}, max{}; // @note target roll range
     u_int gems_each{}; // @note reward = target * gems_each
+    u_short icon{}; // @note item id for add_label_with_icon
 };
 extern const std::array<::quest_type, QUEST_GOAL_COUNT> quest_types;
 

@@ -6,10 +6,10 @@
 
 const std::array<::quest_type, QUEST_GOAL_COUNT> quest_types
 {{
-    { "Break",   "blocks", 50, 150,  10 },
-    { "Place",   "blocks", 50, 150,  10 },
-    { "Harvest", "trees",  10,  30,  50 },
-    { "Catch",   "fish",    5,  15, 150 }
+    { "Break",   "blocks", 50, 150,  10, 2 },    // Dirt
+    { "Place",   "blocks", 50, 150,  10, 2 },    // Dirt
+    { "Harvest", "trees",  10,  30,  50, 3 },    // Dirt Seed
+    { "Catch",   "fish",    5,  15, 150, 3036 }  // Sunfish
 }};
 
 std::string quest_describe(const ::Quest &quest)
@@ -44,36 +44,63 @@ void quest_dialog(ENetEvent &event)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
-    ::create_dialog dialog;
-    dialog
-        .set_default_color("`o")
-        .add_label_with_icon("big", "`wDaily Quest``", 23)
-        .add_spacer("small");
-
+    std::string daily_body;
     const ::Quest &quest = pPeer->quest;
     if (!quest.active())
     {
-        dialog
-            .add_textbox("You don't have a quest right now. Take one on for a gem reward!")
-            .add_spacer("small")
-            .add_button("quest_new", "`wGet a Quest``");
+        daily_body =
+            "add_textbox|You don't have a quest right now. Take one on for a gem reward!|left|\n"
+            "add_spacer|small|\n"
+            "add_button|quest_new|`wGet a Quest``|noflags|0|0|\n";
     }
     else if (quest.complete())
     {
-        dialog
-            .add_textbox(std::format("`2{}`` - complete!", quest_describe(quest)))
-            .add_spacer("small")
-            .add_button("quest_claim", std::format("`wClaim `2{} Gems````", quest.reward_gems));
+        const u_short icon = quest_types[quest.goal].icon;
+        daily_body = std::format(
+            "add_label_with_icon|small|`2{}`` - complete!|left|{}|\n"
+            "add_spacer|small|\n"
+            "add_button|quest_claim|`wClaim `2{} Gems````|noflags|0|0|\n",
+            quest_describe(quest),
+            icon,
+            quest.reward_gems
+        );
     }
     else
     {
-        dialog
-            .add_textbox(std::format("`w{}`` (`2{}``/`2{}``)", quest_describe(quest), quest.progress, quest.target))
-            .add_textbox(std::format("Reward: `2{} Gems``", quest.reward_gems))
-            .add_spacer("small")
-            .add_button("quest_abandon", "`4Abandon Quest``");
+        const u_short icon = quest_types[quest.goal].icon;
+        daily_body = std::format(
+            "add_label_with_icon|small|`w{}`` (`2{}``/`2{}``)|left|{}|\n"
+            "add_textbox|Reward: `2{} Gems``|left|\n"
+            "add_spacer|small|\n"
+            "add_button|quest_abandon|`4Abandon Quest``|noflags|0|0|\n",
+            quest_describe(quest),
+            quest.progress,
+            quest.target,
+            icon,
+            quest.reward_gems
+        );
     }
-    dialog.add_quick_exit();
 
-    send_varlist(event.peer, { "OnDialogRequest", dialog.end_dialog("quest_menu", "Close", "") });
+    send_varlist(event.peer, {
+        "OnDialogRequest",
+        std::format(
+            "set_default_color|`o\n"
+            "add_label_with_icon|small|{}'s Goals|left|982|\n"
+            "add_spacer|small|\n"
+            "add_popup_name|GoalsList|\n"
+            "add_textbox|`9Life Goals``|left|\n"
+            "add_smalltext|`9Complete daily goals to earn gems for your Piggy Bank.``|left|\n"
+            "add_spacer|small|\n"
+            "add_textbox|`9Daily Quest``|left|\n"
+            "{}"
+            "add_spacer|small|\n"
+            "add_textbox|`9Role Quests|left|\n"
+            "add_button|rolesmenu|View Role Quests|noflags|0|0|\n"
+            "add_spacer|small|\n"
+            "end_dialog|goalslist||Back|\n"
+            "add_quick_exit|\n",
+            pPeer->growid,
+            daily_body
+        )
+    });
 }

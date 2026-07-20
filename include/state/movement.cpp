@@ -8,12 +8,13 @@ void movement(ENetEvent& event, state state)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
-    // @note any real movement cancels fishing (must sit still)
+    // @note only cancel fishing when the player really walks away (1+ tiles).
+    // Tiny client jitter / cast animation must not wipe an active bite.
     if (pPeer->fishing)
     {
         const float dx = state.pos.x - pPeer->pos.x;
         const float dy = state.pos.y - pPeer->pos.y;
-        if (dx * dx + dy * dy > 16.0f) // @note ~4px — ignore tiny jitter / standing packets
+        if (dx * dx + dy * dy > 32.0f * 32.0f)
             fishing_cancel(event); // @note silent — no talk bubble on walk-away
     }
     

@@ -23,3 +23,6 @@ handoff/
 
 # in-game action logs (bind-mounted from Docker)
 logs/
+
+# local VPS / debug helper scripts (not server runtime)
+/tools/

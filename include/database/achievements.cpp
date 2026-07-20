@@ -1,18 +1,17 @@
 #include "pch.hpp"
 #include "on/ConsoleMessage.hpp"
-#include "on/SetBux.hpp"
 
 #include "achievements.hpp"
 
 const std::array<::achievement, ACH_COUNT> achievements
 {{
-    { "Demolition Expert",  "Break 500 blocks",        500, 1000 },
-    { "Master Builder",     "Place 500 blocks",        500, 1000 },
-    { "Green Thumb",        "Harvest 100 trees",       100, 1000 },
-    { "World Traveler",     "Visit 50 worlds",          50,  500 },
-    { "Master Angler",      "Catch 50 fish",            50, 1500 },
-    { "Licensed Surgeon",   "Complete 10 surgeries",    10, 2000 },
-    { "Quest Champion",     "Complete 10 daily quests", 10, 2000 }
+    { "Demolition Expert",  "Break 500 blocks",        500, 1000, 6 },
+    { "Master Builder",     "Place 500 blocks",        500, 1000, 0 },
+    { "Green Thumb",        "Harvest 100 trees",       100, 1000, 3 },
+    { "World Traveler",     "Visit 50 worlds",          50,  500, 35 },
+    { "Master Angler",      "Catch 50 fish",            50, 1500, 78 },
+    { "Licensed Surgeon",   "Complete 10 surgeries",    10, 2000, 127 },
+    { "Quest Champion",     "Complete 10 daily quests", 10, 2000, 23 }
 }};
 
 void achievement_progress(ENetEvent &event, ::ach ach, u_int add)
@@ -27,8 +26,7 @@ void achievement_progress(ENetEvent &event, ::ach ach, u_int add)
     pPeer->mark_dirty();
     if (progress < achievement.goal) return;
 
-    pPeer->gems += achievement.reward_gems;
-    on::SetBux(event);
+    pPeer->credit_gems(event, static_cast<int>(achievement.reward_gems));
 
     const std::string message = std::format("`{}{}`` earned the achievement `#{}``!", pPeer->prefix, pPeer->growid, achievement.name);
     if (pPeer->netid != 0)

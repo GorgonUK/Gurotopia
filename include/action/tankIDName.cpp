@@ -1,7 +1,32 @@
 #include "pch.hpp"
 #include "automate/holiday.hpp"
+#include "database/database.hpp"
 
 #include "tankIDName.hpp"
+
+static std::string growid_for_uid(int uid)
+{
+    if (uid <= 0) return {};
+
+    ::hStmt hStmt{ "SELECT growid FROM peer WHERE uid = ? LIMIT 1" };
+    MYSQL_BIND param = make_bind_in(uid);
+    if (mysql_stmt_bind_param(hStmt.pStmt, &param))
+        return {};
+
+    std::string growid;
+    unsigned long length = 0;
+    MYSQL_BIND result = make_bind_out(growid);
+    result.length = &length;
+    if (mysql_stmt_bind_result(hStmt.pStmt, &result))
+        return {};
+    if (mysql_stmt_execute(hStmt.pStmt) || mysql_stmt_store_result(hStmt.pStmt))
+        return {};
+    if (mysql_stmt_num_rows(hStmt.pStmt) == 0 || mysql_stmt_fetch(hStmt.pStmt) != 0)
+        return {};
+
+    growid.resize(length);
+    return growid;
+}
 
 void action::tankIDName(ENetEvent& event, const std::string& header)
 {
@@ -10,18 +35,42 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
     std::vector<std::string> pipes = readch(header, '|');
     if (pipes.empty() || pipes.size() < 41ull) enet_peer_disconnect_later(event.peer, 0);
 
-    for (std::size_t i = 0; i < pipes.size(); ++i) 
+    // @note capture before mysql_load_progress — that overwrites peer fields from DB
+    // (including an empty country), which used to wipe the flag the client just sent.
+    std::string login_country;
+
+    for (std::size_t i = 0; i + 1 < pipes.size(); ++i) 
     {
         if      (pipes[i] == "tankIDName")   pPeer->growid = pipes[i+1];
-        else if (pipes[i] == "country")      pPeer->country = pipes[i+1];
+        else if (pipes[i] == "country")      login_country = pipes[i+1];
         else if (pipes[i] == "user")         pPeer->user_id = std::stoi(pipes[i+1]); // @todo validate user_id
     }
+
+    // @note after OnSendToServer the client may send an empty tankIDName (ltoken /
+    // Google logins). Recover the GrowID from uid so OnSpawn name / wrench work.
+    if (pPeer->growid.empty() && pPeer->user_id > 0)
+        pPeer->growid = growid_for_uid(pPeer->user_id);
 
     // @note game-session peer is a fresh reconnect after OnSendToServer; the
     // inventory/gems/progress loaded on the login peer was discarded, so load
     // it again here (before enter_game grants the starter kit).
     if (!pPeer->mysql_load_progress())
         fprintf(stderr, "[peer] failed to load progress for %s\n", pPeer->growid.c_str());
+
+    // Prefer the country the client just reported (ISO code, e.g. "gb" / "us").
+    // Persist it so later sessions still show the flag if the packet omits it.
+    if (!login_country.empty())
+    {
+        for (char &c : login_country)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        if (login_country.size() > 8)
+            login_country.resize(8);
+        if (pPeer->country != login_country)
+        {
+            pPeer->country = login_country;
+            pPeer->mark_dirty();
+        }
+    }
 
     send_varlist(event.peer, { "OnOverrideGDPRFromServer", 18, 1, 0, 1 });
 

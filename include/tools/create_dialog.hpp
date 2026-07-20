@@ -24,7 +24,8 @@ public:
     create_dialog& add_custom_label(std::string label, std::string pos);
     create_dialog& add_custom_break();
     create_dialog& add_custom_margin(short x, short y);
-    create_dialog& add_achieve(std::string total);
+    create_dialog& add_achieve(std::string name, std::string desc, int icon);
+    create_dialog& add_achieve(std::string total); // wrench summary stub
     create_dialog& add_quick_exit();
     create_dialog& add_popup_name(std::string popup_name);
     create_dialog& add_player_info(std::string label, std::string progress_bar_name, int progress, int total_progress);

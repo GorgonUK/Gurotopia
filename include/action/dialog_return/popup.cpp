@@ -7,6 +7,7 @@
 #include "database/quests.hpp"
 #include "surgery.hpp"
 #include "trade.hpp"
+#include "paginated_personal_notebook.hpp"
 
 #include "popup.hpp"
 
@@ -107,6 +108,33 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
     {
         send_varlist(event.peer, { "OnDialogRequestRML", "show_seed_diary_ui" });
     }
+    else if (hPipe["buttonClicked"] == "set_online_status")
+    {
+        const bool is_online = pPeer->online_status == 0;
+        const bool is_busy = pPeer->online_status == 1;
+        const bool is_away = pPeer->online_status == 2;
+        send_varlist(event.peer, {
+            "OnDialogRequest",
+            std::format(
+                "set_default_color|`o\n"
+                "add_label_with_icon|big| `wOnline Status`` |left|1366|\n"
+                "add_spacer|small|\n"
+                "add_checkbox|checkbox_status_online|Online|{}\n"
+                "add_checkbox|checkbox_status_busy|Busy|{}\n"
+                "add_checkbox|checkbox_status_away|Away|{}\n"
+                "add_button||Ok|noflags|0|0|\n"
+                "end_dialog|set_online_status||\n"
+                "add_quick_exit|\n",
+                to_char(is_online),
+                to_char(is_busy),
+                to_char(is_away)
+            )
+        });
+    }
+    else if (hPipe["buttonClicked"] == "notebook_edit")
+    {
+        send_notebook_view(event, 0);
+    }
     else if (hPipe["buttonClicked"] == "goals")
     {
         quest_dialog(event); // @note same as /quest
@@ -116,17 +144,33 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
         ::create_dialog dialog;
         dialog
             .set_default_color("`o")
-            .add_label_with_icon("big", "`wAchievements``", 7376)
-            .add_spacer("small")
-            .add_textbox(std::format("You've earned `w{}`` of `w{}`` achievements.", achievements_completed(*pPeer), (int)ACH_COUNT))
+            .add_label_with_icon("small", std::format("{}'s Achievements", pPeer->growid), 982)
             .add_spacer("small");
         for (u_char i = 0; i < ACH_COUNT; ++i)
         {
             const ::achievement &achievement = achievements[i];
             const u_int progress = pPeer->ach_progress[i];
-            dialog.add_textbox((progress >= achievement.goal) ?
-                std::format("`2{}`` - {} `2(done!)``", achievement.name, achievement.description) :
-                std::format("`w{}`` - {} `o({}/{})``", achievement.name, achievement.description, progress, achievement.goal));
+            if (progress >= achievement.goal)
+            {
+                dialog.add_achieve(
+                    std::string{ achievement.name },
+                    std::format("Earned for {}.", achievement.description),
+                    achievement.icon
+                );
+            }
+            else if (progress == 0)
+            {
+                dialog.add_achieve(std::string{ achievement.name }, "Not achieved!", 127);
+            }
+            else
+            {
+                const u_int pct = (achievement.goal == 0) ? 0 : (progress * 100u) / achievement.goal;
+                dialog.add_achieve(
+                    std::string{ achievement.name },
+                    std::format("Progress: {}%", pct),
+                    127
+                );
+            }
         }
         dialog
             .add_spacer("small")

@@ -24,12 +24,20 @@ void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip
     });
 
     // @note persist the world every time someone leaves (incl. disconnect),
-    // not only when it empties, so progress is never lost.
-    if (!world_save(*world))
-        fprintf(stderr, "[world] failed to save %s\n", world->name.c_str());
+    // not only when it empties, so floating drops / tile edits are never lost.
+    const bool saved = world_save(*world);
+    if (!saved)
+        fprintf(stderr, "[world] failed to save %s — keeping in memory\n", world->name.c_str());
 
     if (--world->visitors <= 0)
-        worlds.erase(world); // @note take 1, and if result is 0, delete memory copy of world.
+    {
+        // Only drop the in-memory copy when the DB has the latest objects/tiles.
+        // A failed save used to erase here and wipe every floating item on rejoin.
+        if (saved)
+            worlds.erase(world);
+        else
+            world->visitors = 0;
+    }
     pPeer->netid = 0; // this will fix any packets being sent outside of world; this can also be used to check if peer is not in a world.
     pPeer->state &= ~S_DOUBLE_JUMP; // @note drop the xenonite buff when leaving
     pPeer->fishing = false; // @note drop timed fishing session on world leave

@@ -1,0 +1,15 @@
+---
+description: Implement lane — Gurotopia features from captures/ briefs
+globs:
+alwaysApply: true
+---
+
+# Implement workflow (Gurotopia)
+
+When implementing protocol features from official captures:
+
+1. Follow `c:\VS_Repos\captures\agents\IMPLEMENT.md` and `AGENTS.md` in this repo.
+2. Only implement folders with STATUS `ready` (or as named by the user).
+3. Do not invent packets — if the brief is incomplete, set STATUS `blocked` and request a re-capture.
+4. Register every new handler in the correct pool (`__action.cpp`, `__dialog_return.cpp`, `__states.cpp`).
+5. Verify via GTProxy `run/config.gurotopia.json`, then update the feature `notes.md` and `captures/TODO.md`.

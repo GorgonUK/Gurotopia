@@ -96,9 +96,14 @@ create_dialog& create_dialog::add_custom_margin(short x, short y)
     _d.append(std::format("add_custom_margin|x:{};y:{}|\n", x, y));
     return *this;
 }
+create_dialog& create_dialog::add_achieve(std::string name, std::string desc, int icon)
+{
+    _d.append(std::format("add_achieve|{}|{}|left|{}|\n", name, desc, icon));
+    return *this;
+}
 create_dialog& create_dialog::add_achieve(std::string total)
 {
-    _d.append(std::format("add_achieve|||left|{}|\n", total)); // @todo
+    _d.append(std::format("add_achieve|||left|{}|\n", total)); // wrench peer summary
     return *this;
 }
 create_dialog& create_dialog::add_quick_exit()

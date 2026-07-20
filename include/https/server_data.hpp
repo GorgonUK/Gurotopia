@@ -8,7 +8,7 @@ public:
     u_char type{1};
     u_char type2{1};
     std::string maint{"Server under maintenance. Please try again later."};
-    std::string loginurl{"login-gurotopia.vercel.app"};
+    std::string loginurl{"gtlogin-six.vercel.app"};
     std::string meta{"gurotopia"};
 };
 extern ::server_data gServer_data;

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ctime>
+#include <deque>
+#include <atomic>
 
 class peer;
 
@@ -55,7 +57,8 @@ struct block
 
     u_char hits[2] = {0, 0}; // @note fg, bg
 };
-#define cord(x,y) (y * 100 + x)
+// Parentheses are required: cord(x, y + 1) must mean ((y+1)*100+x), not (y+1*100+x).
+#define cord(x, y) (((y) * 100) + (x))
 
 struct door 
 {
@@ -190,7 +193,11 @@ public:
     bool dirty{}; // @note needs DB flush
     void mark_dirty() { dirty = true; }
 };
-extern std::vector<world> worlds;
+// deque: join/leave must not invalidate references held across add_object/tile_change
+// the way std::vector reallocation can.
+extern std::deque<world> worlds;
+extern std::atomic<u_int> g_object_uid; // @note server-wide drop uid high-water (never resets per world)
+extern void note_object_uid(u_int uid);
 
 /* how many tiles a tile lock claims (Small=10, Big=48, Huge/Builder=200) */
 extern int tile_lock_capacity(u_short lock_id);
@@ -260,6 +267,8 @@ extern void remove_fire(ENetEvent &event, state state, ::block &block, ::world& 
 extern void fireworks(ENetEvent &event, const ::pos& pos);
 
 void generate_world(::world &world, const std::string& name);
+/* Ensure every main door (fg 6) has bedrock (fg 8) directly below it. */
+void ensure_main_door_bedrock(::world &world);
 
 bool door_mover(::world &world, const ::pos &pos);
 

@@ -1,6 +1,5 @@
 #include "pch.hpp"
 #include "on/ConsoleMessage.hpp"
-#include "on/SetBux.hpp"
 #include "tools/ransuu.hpp"
 #include "database/quests.hpp"
 #include "database/achievements.hpp"
@@ -27,24 +26,31 @@ void quest_menu(ENetEvent &event, const ::hPipe &hPipe)
         pPeer->mark_dirty();
 
         on::ConsoleMessage(event.peer, std::format("`oNew quest: `w{}`` for `2{} Gems``!``", quest_describe(quest), quest.reward_gems));
+        quest_dialog(event);
     }
     else if (hPipe["buttonClicked"] == "quest_claim")
     {
         if (!quest.complete()) return;
 
-        pPeer->gems += quest.reward_gems;
-        on::SetBux(event);
+        pPeer->credit_gems(event, static_cast<int>(quest.reward_gems));
         pPeer->add_xp(event, 50);
         on::ConsoleMessage(event.peer, std::format("`oQuest complete! You received `2{} Gems``.``", quest.reward_gems));
 
         quest = ::Quest{};
         pPeer->mark_dirty();
         achievement_progress(event, ACH_QUESTS_DONE);
+        quest_dialog(event);
     }
     else if (hPipe["buttonClicked"] == "quest_abandon")
     {
         quest = ::Quest{};
         pPeer->mark_dirty();
         on::ConsoleMessage(event.peer, "`oQuest abandoned.``");
+        quest_dialog(event);
+    }
+    else if (hPipe["buttonClicked"] == "rolesmenu")
+    {
+        on::ConsoleMessage(event.peer, "`oRole Quests are not available yet.``");
+        quest_dialog(event);
     }
 }

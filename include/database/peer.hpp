@@ -134,6 +134,14 @@ public:
     std::vector<short> fav{};
 
     signed gems{0};
+    signed piggy_gems{0}; // @note banked gems (Life Goals / quests / gem pickup); cap 1_500_000
+    static constexpr int PIGGY_CAP = 1'500'000;
+
+    /*
+    * @brief credit wallet gems and bank the same amount into the Piggy Bank (capped).
+    */
+    void credit_gems(ENetEvent &event, int amount);
+
     std::array<u_short, 2ull> level{ 1, 0 }; // {level, xp} XP formula credits: https://www.growtopiagame.com/forums/member/553046-kasete
     /*
     * @brief add XP safely, this function also handles level up.
@@ -157,6 +165,12 @@ public:
 
     std::array<u_int, 8ull> ach_progress{}; // @note per-achievement counters, indexed by ach:: (see database/achievements.hpp)
     ::Quest quest{}; // @note active daily quest
+
+    /* online status shown on wrench button (0=Online, 1=Busy, 2=Away) */
+    u_char online_status{ 0 };
+
+    /* personal notebook — 5 pages, max 256 chars each */
+    std::array<std::string, 5ull> notebook_pages{};
 
     /* timed fishing session (not persisted) — cast bait, wait for splash, punch to reel */
     bool fishing{};

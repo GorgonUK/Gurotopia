@@ -35,6 +35,10 @@ void create_table_if_not_exist()
             fprintf(stderr, "[migrate] %s\n", mysql_error(db));
     }
 
+    // migration: Google Sign-In linkage (filled by GTLogin; game server only verifies password)
+    run_query("ALTER TABLE peer ADD COLUMN google_sub VARCHAR(64) NULL UNIQUE", /*silent_dup=*/true);
+    run_query("ALTER TABLE peer ADD COLUMN email VARCHAR(255) NULL", /*silent_dup=*/true);
+
     run_query(R"(
         CREATE TABLE IF NOT EXISTS peer_state (
             uid INT PRIMARY KEY,
@@ -55,6 +59,8 @@ void create_table_if_not_exist()
             my_worlds BLOB NOT NULL,
             achievements BLOB NOT NULL,
             quest BLOB NOT NULL,
+            online_status TINYINT UNSIGNED NOT NULL DEFAULT 0,
+            notebook BLOB NOT NULL,
             CONSTRAINT fk_peer_state_uid FOREIGN KEY (uid) REFERENCES peer(uid) ON DELETE CASCADE
         )
     )");
@@ -68,6 +74,15 @@ void create_table_if_not_exist()
 
     // migration: active daily quest {goal, progress, target, reward_gems} as 4 u_ints
     run_query("ALTER TABLE peer_state ADD COLUMN quest BLOB NOT NULL", /*silent_dup=*/true);
+
+    // migration: wrench online status (0=Online, 1=Busy, 2=Away)
+    run_query("ALTER TABLE peer_state ADD COLUMN online_status TINYINT UNSIGNED NOT NULL DEFAULT 0", /*silent_dup=*/true);
+
+    // migration: personal notebook (5 length-prefixed UTF-8 pages)
+    run_query("ALTER TABLE peer_state ADD COLUMN notebook BLOB NOT NULL", /*silent_dup=*/true);
+
+    // migration: piggy bank balance (gems earned toward the 1.5M bank)
+    run_query("ALTER TABLE peer_state ADD COLUMN piggy_gems INT NOT NULL DEFAULT 0", /*silent_dup=*/true);
 
     run_query(R"(
         CREATE TABLE IF NOT EXISTS peer_inventory (

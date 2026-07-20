@@ -4,6 +4,7 @@
 #include "world.hpp"
 #include "on/SetClothing.hpp"
 #include "on/CountryState.hpp"
+#include "on/SetBux.hpp"
 #include "commands/punch.hpp"
 #include "tools/string.hpp"
 
@@ -97,7 +98,8 @@ bool peer::mysql_load_progress()
 
     ::hStmt hStmt{
         "SELECT gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
-        "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest "
+        "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest, "
+        "online_status, notebook, piggy_gems "
         "FROM peer_state WHERE uid = ? LIMIT 1"
     };
 
@@ -109,20 +111,24 @@ bool peer::mysql_load_progress()
     }
 
     signed gems = 0;
+    signed piggy_gems = 0;
     unsigned level = 1, xp = 0, slot_size = 16;
     unsigned role = 0, skin_color = 2527912447u, hair_color = 4278255615u;
     unsigned fires_removed = 0, gbc_pity = 0, initialized = 0;
+    unsigned online_status = 0;
     std::string country;
     std::vector<u_char> clothing_blob(40, 0);
     std::vector<u_char> fav_blob;
     std::vector<u_char> recent_blob, my_blob;
     std::vector<u_char> ach_blob(64, 0);
     std::vector<u_char> quest_blob(16, 0);
-    unsigned long clothing_len = 0, fav_len = 0, country_len = 0, recent_len = 0, my_len = 0, ach_len = 0, quest_len = 0;
+    std::vector<u_char> notebook_blob;
+    unsigned long clothing_len = 0, fav_len = 0, country_len = 0, recent_len = 0, my_len = 0, ach_len = 0, quest_len = 0, notebook_len = 0;
 
     fav_blob.resize(512);
+    notebook_blob.resize(2048);
 
-    MYSQL_BIND results[17]{};
+    MYSQL_BIND results[20]{};
     results[0]  = make_bind_out(gems);
     results[1]  = make_bind_out(level);
     results[2]  = make_bind_out(xp);
@@ -141,6 +147,9 @@ bool peer::mysql_load_progress()
     results[14] = make_bind_out_blob(my_blob, my_len);
     results[15] = make_bind_out_blob(ach_blob, ach_len);
     results[16] = make_bind_out_blob(quest_blob, quest_len);
+    results[17] = make_bind_out(online_status);
+    results[18] = make_bind_out_blob(notebook_blob, notebook_len);
+    results[19] = make_bind_out(piggy_gems);
 
     if (mysql_stmt_bind_result(hStmt.pStmt, results))
     {
@@ -176,8 +185,10 @@ bool peer::mysql_load_progress()
     trim_blob(my_blob, my_len);
     trim_blob(ach_blob, ach_len);
     trim_blob(quest_blob, quest_len);
+    trim_blob(notebook_blob, notebook_len);
 
     this->gems = gems;
+    this->piggy_gems = std::clamp(piggy_gems, 0, PIGGY_CAP);
     this->level = { static_cast<u_short>(level), static_cast<u_short>(xp) };
     this->slot_size = static_cast<short>(slot_size);
     this->role = static_cast<u_char>(role);
@@ -187,6 +198,7 @@ bool peer::mysql_load_progress()
     this->fires_removed = static_cast<u_short>(fires_removed);
     this->gbc_pity = static_cast<u_short>(gbc_pity);
     this->inventory_initialized = (initialized != 0);
+    this->online_status = static_cast<u_char>(online_status <= 2 ? online_status : 0);
 
     this->clothing.fill(0.0f);
     if (clothing_blob.size() >= sizeof(float) * 10ull)
@@ -210,6 +222,23 @@ bool peer::mysql_load_progress()
         u_int packed[4]{};
         std::memcpy(packed, quest_blob.data(), sizeof(packed));
         this->quest = ::Quest{ packed[0], packed[1], packed[2], packed[3] };
+    }
+
+    this->notebook_pages.fill(std::string{});
+    {
+        std::size_t offset = 0;
+        for (std::size_t i = 0; i < this->notebook_pages.size() && offset + sizeof(u_short) <= notebook_blob.size(); ++i)
+        {
+            u_short len = 0;
+            std::memcpy(&len, notebook_blob.data() + offset, sizeof(u_short));
+            offset += sizeof(u_short);
+            if (offset + len > notebook_blob.size()) break;
+            this->notebook_pages[i].assign(
+                reinterpret_cast<const char*>(notebook_blob.data() + offset),
+                reinterpret_cast<const char*>(notebook_blob.data() + offset + len)
+            );
+            offset += len;
+        }
     }
 
     // '\n'-joined world names -> fill the fixed array from the back so that
@@ -300,7 +329,19 @@ bool peer::mysql_save_progress()
     std::vector<u_char> quest_blob(sizeof(quest_packed), 0);
     std::memcpy(quest_blob.data(), quest_packed, quest_blob.size());
 
+    std::vector<u_char> notebook_blob;
+    for (const std::string &page : this->notebook_pages)
+    {
+        const u_short len = static_cast<u_short>(std::min<std::size_t>(page.size(), 256ull));
+        const std::size_t at = notebook_blob.size();
+        notebook_blob.resize(at + sizeof(u_short) + len);
+        std::memcpy(notebook_blob.data() + at, &len, sizeof(u_short));
+        if (len != 0)
+            std::memcpy(notebook_blob.data() + at + sizeof(u_short), page.data(), len);
+    }
+
     signed gems = this->gems;
+    signed piggy_gems = this->piggy_gems;
     unsigned level = this->level.front();
     unsigned xp = this->level.back();
     signed slot_size = this->slot_size;
@@ -310,12 +351,14 @@ bool peer::mysql_save_progress()
     unsigned fires_removed = this->fires_removed;
     unsigned gbc_pity = this->gbc_pity;
     unsigned initialized = this->inventory_initialized ? 1u : 0u;
+    unsigned online_status = this->online_status;
 
     ::hStmt upsert{
         "INSERT INTO peer_state "
         "(uid, gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
-        "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest, "
+        "online_status, notebook, piggy_gems) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON DUPLICATE KEY UPDATE "
         // @note role deliberately NOT updated: the DB is authoritative for it, so a
         // manual `UPDATE peer_state SET role=1` can't be clobbered by a session save.
@@ -324,10 +367,11 @@ bool peer::mysql_save_progress()
         "skin_color=VALUES(skin_color), hair_color=VALUES(hair_color), country=VALUES(country), "
         "fires_removed=VALUES(fires_removed), gbc_pity=VALUES(gbc_pity), initialized=VALUES(initialized), "
         "recent_worlds=VALUES(recent_worlds), my_worlds=VALUES(my_worlds), achievements=VALUES(achievements), "
-        "quest=VALUES(quest)"
+        "quest=VALUES(quest), online_status=VALUES(online_status), notebook=VALUES(notebook), "
+        "piggy_gems=VALUES(piggy_gems)"
     };
 
-    MYSQL_BIND params[18] = {
+    MYSQL_BIND params[21] = {
         make_bind_in(this->user_id),
         make_bind_in(gems),
         make_bind_in(level),
@@ -345,7 +389,10 @@ bool peer::mysql_save_progress()
         make_bind_in_blob(recent_blob),
         make_bind_in_blob(my_blob),
         make_bind_in_blob(ach_blob),
-        make_bind_in_blob(quest_blob)
+        make_bind_in_blob(quest_blob),
+        make_bind_in(online_status),
+        make_bind_in_blob(notebook_blob),
+        make_bind_in(piggy_gems)
     };
 
     if (mysql_stmt_bind_param(upsert.pStmt, params) || mysql_stmt_execute(upsert.pStmt))
@@ -419,7 +466,7 @@ u_short peer::emplace(::slot slot)
     this->dirty = true;
     if (auto it = std::ranges::find(this->slots, slot.id, &::slot::id); it != this->slots.end()) 
     {
-        const u_short excess = std::max(0, (it->count + slot.count) - 200);
+        const u_short excess = static_cast<u_short>(std::max(0, (it->count + slot.count) - 200));
         it->count = std::min(it->count + slot.count, 200);
         if (it->count == 0)
         {
@@ -429,8 +476,22 @@ u_short peer::emplace(::slot slot)
         }
         return excess;
     }
-    else this->slots.emplace_back(std::move(slot)); // @note no such item in inventory, so we create a new entry.
+    // New stack: refuse if backpack has no free slot (keeps client/server inventory in sync).
+    if (slot.count > 0 && static_cast<short>(this->slots.size()) >= this->slot_size)
+        return static_cast<u_short>(slot.count);
+    if (slot.count != 0)
+        this->slots.emplace_back(std::move(slot));
     return 0;
+}
+
+void peer::credit_gems(ENetEvent &event, int amount)
+{
+    if (amount <= 0) return;
+
+    this->gems = std::clamp(this->gems + amount, 0, std::numeric_limits<signed>::max());
+    this->piggy_gems = std::min(this->piggy_gems + amount, PIGGY_CAP);
+    this->mark_dirty();
+    on::SetBux(event);
 }
 
 void peer::add_xp(ENetEvent &event, u_short value) 

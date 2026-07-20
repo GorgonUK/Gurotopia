@@ -9,6 +9,10 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}
     volumes:
       - gurotopia-db:/var/lib/mysql
+    # Published so GTLogin (Vercel) can verify passwords / Google accounts.
+    # Prefer firewalling 3306; do not use a weak password on a public bind.
+    ports:
+      - "3306:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 5s

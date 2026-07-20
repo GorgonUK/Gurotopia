@@ -9,6 +9,7 @@
 #include "tools/ransuu.hpp"
 #include "database/world_ban.hpp"
 #include "database/achievements.hpp"
+#include "quit_to_exit.hpp"
 
 #include "join_request.hpp"
 
@@ -20,6 +21,11 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
     try 
     {
         ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+
+        // Already inside a world (e.g. client skipped quit_to_exit) — leave cleanly first
+        // so visitor counts / drop broadcasts stay attached to the right world.
+        if (pPeer->netid != 0)
+            action::quit_to_exit(event, "", true);
 
         std::string big_name{header.size() < 2 ? world_name : readch(header, '|')[3]};
         if (!alnum(big_name)) throw std::runtime_error("Sorry, spaces and special characters are not allowed in world or door names.  Try again.");
@@ -39,6 +45,11 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
                 generate_world(*it, big_name);
         }
         ::world &world = *it;
+        // Map baseline must stay ahead of any uid the client may still remember
+        // from a previous world in this session.
+        if (g_object_uid.load() > world.last_object_uid)
+            world.last_object_uid = g_object_uid.load();
+        ensure_main_door_bedrock(world);
 
         std::vector<std::string> buffs{};
         {

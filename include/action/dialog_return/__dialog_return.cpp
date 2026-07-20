@@ -18,6 +18,8 @@
 #include "magplant.hpp"
 #include "trade.hpp"
 #include "combiner.hpp"
+#include "set_online_status.hpp"
+#include "paginated_personal_notebook.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -46,6 +48,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"donation_edit", std::bind(&letter_box, std::placeholders::_1, std::placeholders::_2)},
 
     {"quest_menu", std::bind(&quest_menu, std::placeholders::_1, std::placeholders::_2)},
+    {"goalslist", std::bind(&quest_menu, std::placeholders::_1, std::placeholders::_2)},
     {"surgery", std::bind(&surgery, std::placeholders::_1, std::placeholders::_2)},
 
     {"display_edit", std::bind(&display_edit, std::placeholders::_1, std::placeholders::_2)},
@@ -54,4 +57,8 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
 
     {"trade_edit", std::bind(&trade_edit, std::placeholders::_1, std::placeholders::_2)},
     {"combiner_edit", std::bind(&combiner_edit, std::placeholders::_1, std::placeholders::_2)},
+
+    {"set_online_status", std::bind(&set_online_status, std::placeholders::_1, std::placeholders::_2)},
+    {"paginated_personal_notebook_view", std::bind(&paginated_personal_notebook_view, std::placeholders::_1, std::placeholders::_2)},
+    {"paginated_personal_notebook_edit", std::bind(&paginated_personal_notebook_edit, std::placeholders::_1, std::placeholders::_2)},
 };

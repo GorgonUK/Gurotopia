@@ -4,6 +4,8 @@
 #include "database.hpp"
 #include "server_config.hpp"
 
+#include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <ctime>
 #include <deque>
@@ -714,6 +716,13 @@ bool world_load(::world &world, const std::string &name)
         world.minimum_entry_level = static_cast<u_char>(min_level);
         world.weather = ::pos{weather_x, weather_y};
         world.last_object_uid = last_uid;
+        for (const ::object &o : world.objects)
+        {
+            if (o.uid > world.last_object_uid)
+                world.last_object_uid = o.uid;
+            note_object_uid(o.uid);
+        }
+        note_object_uid(world.last_object_uid);
         world.visitors = 0;
         world.netid_counter = 0;
         world.dirty = false;
@@ -751,7 +760,16 @@ world::world(const std::string& name)
     this->name = name;
 }
 
-std::vector<world> worlds;
+std::deque<world> worlds;
+std::atomic<u_int> g_object_uid{0};
+
+void note_object_uid(u_int uid)
+{
+    u_int cur = g_object_uid.load(std::memory_order_relaxed);
+    while (uid > cur && !g_object_uid.compare_exchange_weak(cur, uid, std::memory_order_relaxed))
+    {
+    }
+}
 
 void send_action(ENetPeer& p, const std::string& action, const std::string& str) 
 {
@@ -832,8 +850,9 @@ void merge_object(ENetEvent& event, ::slot slot, const ::pos& pos, ::world &worl
     auto object = std::ranges::find_if(world.objects, [&](const ::object &object) {
         return object.id == slot.id && (object.pos.by_32(true) == pos.by_32(true));
     });
-    /* @todo avoid surpassing 200 and call add_object() for the remaining amount */ // @note future self reference peer::emplace()...
-    object->count += slot.count;
+    if (object == world.objects.end()) return;
+    /* @todo avoid surpassing 200 and call add_object() for the remaining amount */
+    object->count = static_cast<u_short>(std::min(200, static_cast<int>(object->count) + static_cast<int>(slot.count)));
 
     item_change_object(event, ::state{
         .netid = (int)0xfffffffd,
@@ -908,7 +927,10 @@ int add_object(ENetEvent& event, ::slot slot, const ::pos& pos, ::world &world)
         merge_object(event, slot, pos, world);
         return object->uid;
     }
-    ::object it = world.objects.emplace_back(::object(slot.id, slot.count, pos, ++world.last_object_uid)); // @note a iterator ahead of time
+    const u_int uid = g_object_uid.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (uid > world.last_object_uid)
+        world.last_object_uid = uid;
+    ::object it = world.objects.emplace_back(::object(slot.id, slot.count, pos, uid));
 
     item_change_object(event, ::state{
         .netid = (int)0xffffffff,
@@ -1171,16 +1193,77 @@ void generate_world(::world &world, const std::string& name)
             else
                 block.fg = (y >= BEDROCK_Y) ? 8 : 2; // bedrock / dirt
         }
+    }
 
-        if (i == static_cast<std::size_t>(cord(main_door, DOOR_Y)))
-            block.fg = 6, block.label = "EXIT";
-        else if (i == static_cast<std::size_t>(cord(main_door, DOOR_Y + 1)))
-            block.fg = 8; // bedrock under main door
+    // Place exit AFTER terrain fill. Never use cord(door, DOOR_Y + 1) — without
+    // parenthesized macro args that used to put bedrock in the sky, not under the door.
+    {
+        const std::size_t door_i = static_cast<std::size_t>(DOOR_Y) * static_cast<std::size_t>(WIDTH) + main_door;
+        const std::size_t pad_i = door_i + static_cast<std::size_t>(WIDTH);
+        blocks[door_i].fg = 6;
+        blocks[door_i].label = "EXIT";
+        blocks[pad_i].fg = 8;
+        blocks[pad_i].bg = 14;
     }
 
     world.blocks = std::move(blocks);
     world.name = std::move(name);
+    world.objects.clear();
+    // Keep the global drop-uid high-water so the client baseline does not reset to 0
+    // when entering a brand-new world after one that already spawned drops.
+    world.last_object_uid = g_object_uid.load();
+    ensure_main_door_bedrock(world);
     world.mark_dirty();
+}
+
+void ensure_main_door_bedrock(::world &world)
+{
+    if (world.blocks.empty()) return;
+    const std::size_t width = 100ull;
+    if (world.blocks.size() % width != 0) return;
+
+    constexpr int SURFACE_Y = 25;
+    constexpr int BEDROCK_Y = 54;
+    bool changed = false;
+
+    // Remove sky bedrock left by the old cord(x, y+1) precedence bug (y < surface).
+    for (std::size_t i = 0; i < world.blocks.size(); ++i)
+    {
+        if (world.blocks[i].fg != 8) continue;
+        const int y = static_cast<int>(i / width);
+        if (y >= SURFACE_Y) continue;
+        world.blocks[i].fg = 0;
+        changed = true;
+    }
+
+    // Exactly one bedrock under each main door. Extra surface-row bedrock (from the
+    // brief 3-wide pad mistake) becomes normal dirt again.
+    for (std::size_t i = 0; i < world.blocks.size(); ++i)
+    {
+        if (world.blocks[i].fg != 6) continue;
+        const std::size_t under = i + width;
+        if (under >= world.blocks.size()) continue;
+        if (world.blocks[under].fg != 8 || world.blocks[under].bg == 0)
+        {
+            world.blocks[under].fg = 8;
+            if (world.blocks[under].bg == 0)
+                world.blocks[under].bg = 14;
+            changed = true;
+        }
+    }
+    for (std::size_t i = 0; i < world.blocks.size(); ++i)
+    {
+        if (world.blocks[i].fg != 8) continue;
+        const int y = static_cast<int>(i / width);
+        if (y < SURFACE_Y || y >= BEDROCK_Y) continue;
+        if (i < width) continue;
+        if (world.blocks[i - width].fg == 6) continue; // pad under main door — keep
+        world.blocks[i].fg = 2;
+        if (world.blocks[i].bg == 0)
+            world.blocks[i].bg = 14;
+        changed = true;
+    }
+    if (changed) world.mark_dirty();
 }
 
 bool door_mover(::world &world, const ::pos &pos)
@@ -1201,6 +1284,7 @@ bool door_mover(::world &world, const ::pos &pos)
     }
     blocks[cord(pos.x, pos.y)].fg = 6;
     blocks[cord(pos.x, (pos.y + 1))].fg = 8;
+    blocks[cord(pos.x, (pos.y + 1))].bg = 14;
     world.mark_dirty();
     return true;
 }
@@ -1220,13 +1304,17 @@ void blast::thermonuclear(::world &world, const std::string& name)
     {
         const int y = static_cast<int>(i / WIDTH);
         blocks[i].fg = (y >= BEDROCK_Y) ? 8 : 0;
-
-        if (i == static_cast<std::size_t>(cord(main_door, DOOR_Y)))
-            blocks[i].fg = 6;
-        else if (i == static_cast<std::size_t>(cord(main_door, DOOR_Y + 1)))
-            blocks[i].fg = 8;
+    }
+    {
+        const std::size_t door_i = static_cast<std::size_t>(DOOR_Y) * static_cast<std::size_t>(WIDTH) + main_door;
+        const std::size_t pad_i = door_i + static_cast<std::size_t>(WIDTH);
+        blocks[door_i].fg = 6;
+        blocks[pad_i].fg = 8;
     }
     world.blocks = std::move(blocks);
     world.name = std::move(name);
+    world.objects.clear();
+    world.last_object_uid = g_object_uid.load();
+    ensure_main_door_bedrock(world);
     world.mark_dirty();
 }

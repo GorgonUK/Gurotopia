@@ -34,7 +34,11 @@ void action::wrench(ENetEvent& event, const std::string& header)
                             .add_spacer("small")
                             .set_custom_spacing(5, 10)
                             .add_custom_button("open_personlize_profile", "image:interface/large/gui_wrench_personalize_profile.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("set_online_status", "image:interface/large/gui_wrench_online_status_1green.rttex;image_size:400,260;width:0.19;")
+                            .add_custom_button("set_online_status", std::format(
+                                "image:interface/large/gui_wrench_online_status_{}.rttex;image_size:400,260;width:0.19;",
+                                (pOthers->online_status == 1) ? "3red" :
+                                (pOthers->online_status == 2) ? "2yellow" : "1green"
+                            ))
                             .add_custom_button("billboard_edit", "image:interface/large/gui_wrench_edit_billboard.rttex;image_size:400,260;width:0.19;")
                             .add_custom_button("wardrobe_customization", "image:interface/large/gui_wrench_wardrobe.rttex;image_size:400,260;width:0.19;")
                             .add_custom_button("seed_diary_customization", "image:interface/large/gui_wrench_seed_diary.rttex;image_size:400,260;width:0.19;")
