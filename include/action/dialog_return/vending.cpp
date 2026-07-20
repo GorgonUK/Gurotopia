@@ -4,11 +4,12 @@
 
 #include "vending.hpp"
 
-static bool is_world_editor(::peer *pPeer, const ::world &world)
+/* only the World Lock owner (or staff) may stock / price / withdraw */
+static bool is_vending_owner(::peer *pPeer, const ::world &world)
 {
-    if (!world.owner || pPeer->role) return true;
-    if (pPeer->user_id == world.owner) return true;
-    return std::ranges::find(world.access, pPeer->user_id) != world.access.end();
+    if (!world.owner) return false; // @note unlocked worlds have no vending owner
+    if (pPeer->role) return true;
+    return pPeer->user_id == world.owner;
 }
 
 static short inventory_count(::peer *pPeer, short id)
@@ -27,7 +28,7 @@ static ::vending &ensure_vending(::world &world, const ::pos &pos)
 void vending_dialog(ENetEvent &event, const ::state &state, ::world &world, const ::item &item)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
-    const bool owner = is_world_editor(pPeer, world);
+    const bool owner = is_vending_owner(pPeer, world);
     ::vending &vend = ensure_vending(world, state.punch);
 
     if (!owner)
@@ -162,7 +163,7 @@ void vending_edit(ENetEvent &event, const ::hPipe &hPipe)
     if (id_to_item(block.fg).type != type::VENDING_MACHINE) return;
 
     ::vending &vend = ensure_vending(*world, pos);
-    const bool owner = is_world_editor(pPeer, *world);
+    const bool owner = is_vending_owner(pPeer, *world);
     const std::string &clicked = hPipe["buttonClicked"];
 
     auto refresh = [&]{
@@ -170,6 +171,7 @@ void vending_edit(ENetEvent &event, const ::hPipe &hPipe)
         send_tile_update(event, ::state{ .punch = pos }, block, *world);
     };
 
+    // @note stock / price / withdraw — owner only (access list may only buy)
     if (owner && !hPipe["stockitem"].empty())
     {
         const short id = static_cast<short>(atoi(hPipe["stockitem"].c_str()));
@@ -245,6 +247,7 @@ void vending_edit(ENetEvent &event, const ::hPipe &hPipe)
         return;
     }
 
+    // @note buy path — anyone who is not the configuring owner
     if (!owner && !hPipe["buycount"].empty())
     {
         if (vend.id == 0 || vend.price == 0 || vend.count == 0) return;

@@ -3,6 +3,7 @@
 #include "commands/punch.hpp"
 #include "on/ConsoleMessage.hpp"
 #include "action/dialog_return/magplant.hpp"
+#include "fishing.hpp"
 
 #include "item_activate.hpp"
 
@@ -16,6 +17,10 @@ void item_activate(ENetEvent& event, state state)
         float &current_cloth = pPeer->clothing[item.cloth_type]; // @note ID of the current clothing being changed
 
         current_cloth = (current_cloth == state.id) ? 0 : state.id;
+
+        // @note putting the fishing rod away ends an active cast
+        if (pPeer->fishing && item.cloth_type == hand && static_cast<short>(current_cloth) != 2912)
+            fishing_cancel(event); // @note silent — rod put away
 
         pPeer->update_effects();
         pPeer->mark_dirty();

@@ -32,6 +32,8 @@ void action::quit_to_exit(ENetEvent& event, const std::string& header, bool skip
         worlds.erase(world); // @note take 1, and if result is 0, delete memory copy of world.
     pPeer->netid = 0; // this will fix any packets being sent outside of world; this can also be used to check if peer is not in a world.
     pPeer->state &= ~S_DOUBLE_JUMP; // @note drop the xenonite buff when leaving
+    pPeer->fishing = false; // @note drop timed fishing session on world leave
+    pPeer->fish_bite = false;
 
     prefix.front() = (prefix.front() == '2' || prefix.front() == 'c') ? 'w' : prefix.front();
     if (!skip_selection) on::RequestWorldSelectMenu(event);

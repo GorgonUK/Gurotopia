@@ -14,7 +14,7 @@
 #include "action/dialog_return/display_edit.hpp"
 #include "action/dialog_return/vending.hpp"
 #include "action/dialog_return/magplant.hpp"
-#include "action/dialog_return/gameplay_extra.hpp"
+#include "action/dialog_return/combiner.hpp"
 #include "database/server_config.hpp"
 #include "database/achievements.hpp"
 #include "database/quests.hpp"
@@ -56,9 +56,13 @@ void tile_change(ENetEvent& event, state state)
                 return; // @note avoid hitting the block
             }
 
-        if (state.id == 18 && try_fishing(event, state, block, *world)) return; // @note casting a Fishing Rod on water
+        if (try_fishing(event, state, block, *world)) return; // @note rod + bait on water (use bait or punch)
 
-        if (!(item.cat & CAT_PUBLIC)) // @note if block is public skip validating if peer is owner or access
+        // @note guests may wrench public-interact tiles (buy from vending, etc.) without build rights
+        const bool public_wrench =
+            state.id == 32 && item.type == type::VENDING_MACHINE;
+
+        if (!(item.cat & CAT_PUBLIC) && !public_wrench) // @note if block is public skip validating if peer is owner or access
             if (!peer_can_edit_tile(pPeer, *world, state.punch)) return;
 
         bool lock_visuals{}; // @todo this looks sloppy
@@ -933,6 +937,9 @@ void tile_change(ENetEvent& event, state state)
                 }
                 case type::VENDING_MACHINE:
                 {
+                    // @note real GT: vendings only work in World Locked worlds
+                    if (!world->owner)
+                        throw std::runtime_error("Vending Machines can only be placed in a `$World Locked`` world.");
                     if (std::ranges::find(world->vendings, state.punch, &::vending::pos) == world->vendings.end())
                         world->vendings.emplace_back(state.punch);
                     break;

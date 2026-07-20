@@ -158,7 +158,13 @@ public:
     std::array<u_int, 8ull> ach_progress{}; // @note per-achievement counters, indexed by ach:: (see database/achievements.hpp)
     ::Quest quest{}; // @note active daily quest
 
-    std::chrono::steady_clock::time_point last_cast{}; // @note last fishing attempt (not persisted)
+    /* timed fishing session (not persisted) — cast bait, wait for splash, punch to reel */
+    bool fishing{};
+    bool fish_bite{}; // @note splash is up; punch now to catch
+    ::pos fish_tile{}; // @note water tile being fished (tile coords)
+    short fish_bait{};
+    std::chrono::steady_clock::time_point fish_next_check{}; // @note next splash roll
+    std::chrono::steady_clock::time_point fish_bite_until{}; // @note bite window ends
 
     /* active player-to-player trade (dialog-based, not persisted) */
     int trade_with_netid{-1};
