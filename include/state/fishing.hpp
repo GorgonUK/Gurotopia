@@ -9,8 +9,8 @@
 */
 extern bool try_fishing(ENetEvent &event, const ::state &state, ::block &block, ::world &world);
 
-/* end an active cast (movement / unequip / leaving world). bait is kept. */
-extern void fishing_cancel(ENetEvent &event, const char *reason = "`oYou stopped fishing.``");
+/* end an active cast (movement / unequip / leaving world). bait is kept. silent by default. */
+extern void fishing_cancel(ENetEvent &event, const char *reason = nullptr);
 
 /* called ~once per second from the main loop — rolls splashes / expires bite windows */
 extern void fishing_tick();

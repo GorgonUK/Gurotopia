@@ -80,13 +80,25 @@ namespace
         });
     }
 
-    /* drop the cast line / unfreeze look for everyone in the world */
-    void broadcast_stop(ENetEvent &event, const ::peer &peer)
+    /* clear fishing line for everyone — GTOS uses SET_CHARACTER_STATE + OnSetPos */
+    void broadcast_stop(ENetEvent &event, ::peer &peer)
     {
+        // @note restore normal character state (undoes the cast freeze / line attach)
         state_visuals(*event.peer, ::state{
-            .type = 0x00, // @note normal movement snapshot clears the cast pose
+            .type = 0x14 | ((0x808000 + peer.punch_effect) << 8),
             .netid = peer.netid,
-            .pos = peer.pos
+            .count = 125.0f,
+            .id = peer.state,
+            .pos = ::pos{ 1200.0f, 200.0f },
+            .speed = ::pos{ 250.0f, 1000.0f },
+            .punch = ::pos{ peer.hair_color, 0x00000000 }
+        });
+
+        // @note snap position — client drops the fishing line that was following the player
+        const CL_Vec2f at{ peer.pos.x, peer.pos.y };
+        peers(peer.recent_worlds.back(), PEER_SAME_WORLD, [&](ENetPeer &p)
+        {
+            send_varlist(&p, { "OnSetPos", at }, peer.netid);
         });
     }
 
@@ -200,7 +212,7 @@ void fishing_cancel(ENetEvent &event, const char *reason)
 
     clear_session(*pPeer);
     broadcast_stop(event, *pPeer);
-    if (reason && *reason)
+    if (reason != nullptr && reason[0] != '\0')
         send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, reason, 0u });
 }
 
@@ -219,7 +231,7 @@ void fishing_tick()
         if (!has_fishing_rod(*pPeer))
         {
             ENetEvent ev{ .peer = &peer };
-            fishing_cancel(ev, "`oYou put your rod away.``");
+            fishing_cancel(ev); // @note silent — rod unequipped
             continue;
         }
 
@@ -267,7 +279,7 @@ bool try_fishing(ENetEvent &event, const ::state &state, ::block &block, ::world
             try_reel(event, *pPeer, world);
             return true;
         }
-        fishing_cancel(event, "`oYou stopped fishing.``");
+        fishing_cancel(event); // @note silent — other action interrupts cast
         return false; // @note let the new action proceed
     }
 

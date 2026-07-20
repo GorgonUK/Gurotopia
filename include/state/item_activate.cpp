@@ -20,7 +20,7 @@ void item_activate(ENetEvent& event, state state)
 
         // @note putting the fishing rod away ends an active cast
         if (pPeer->fishing && item.cloth_type == hand && static_cast<short>(current_cloth) != 2912)
-            fishing_cancel(event, "`oYou put your rod away.``");
+            fishing_cancel(event); // @note silent — rod put away
 
         pPeer->update_effects();
         pPeer->mark_dirty();

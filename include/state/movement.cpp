@@ -14,7 +14,7 @@ void movement(ENetEvent& event, state state)
         const float dx = state.pos.x - pPeer->pos.x;
         const float dy = state.pos.y - pPeer->pos.y;
         if (dx * dx + dy * dy > 16.0f) // @note ~4px — ignore tiny jitter / standing packets
-            fishing_cancel(event, "`oSit perfectly while fishing!``");
+            fishing_cancel(event); // @note silent — no talk bubble on walk-away
     }
     
     pPeer->pos = state.pos;
