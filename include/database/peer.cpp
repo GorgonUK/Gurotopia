@@ -425,6 +425,7 @@ u_short peer::emplace(::slot slot)
         {
             const ::item &item = id_to_item(it->id);
             if (item.cloth_type != clothing::none) this->clothing[item.cloth_type] = 0;
+            this->slots.erase(it); // @note free the backpack slot once the stack is gone
         }
         return excess;
     }

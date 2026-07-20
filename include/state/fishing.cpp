@@ -109,8 +109,15 @@ namespace
         {
             ENetEvent pev{ .peer = &p };
             send_particle_effect(pev, pixel, {0x00, 0x24}, 36); // @note splash particle (id 36)
-            send_varlist(&p, { "OnTalkBubble", pPeer.netid, "`9*splash!*``", 0u });
         });
+    }
+
+    /* occupied backpack slots — emptied entries (count 0) still linger in slots until save */
+    std::size_t used_inventory_slots(const ::peer &peer)
+    {
+        return static_cast<std::size_t>(std::ranges::count_if(peer.slots, [](const ::slot &s) {
+            return s.count > 0;
+        }));
     }
 
     void award_catch(ENetEvent &event, ::peer &pPeer, ::world &world, const ::pos &/*water_tile*/, short bait_id)
@@ -143,9 +150,10 @@ namespace
             if (roll > 0) continue;
 
             // @note inventory if there's room; otherwise drop beside the player (not in the water)
+            // @note count only slots with count > 0 — bait just consumed may leave a 0-count entry
             auto existing = std::ranges::find(pPeer.slots, fish.id, &::slot::id);
             const bool can_stack = existing != pPeer.slots.end() && existing->count < 200;
-            const bool can_new_slot = pPeer.slots.size() < static_cast<std::size_t>(pPeer.slot_size);
+            const bool can_new_slot = used_inventory_slots(pPeer) < static_cast<std::size_t>(pPeer.slot_size);
             if (can_stack || can_new_slot)
                 modify_item_inventory(event, ::slot(fish.id, 1));
             else
@@ -156,10 +164,7 @@ namespace
 
             const std::string message = std::format("`{}{}`` caught a `2{}``!",
                 pPeer.prefix, pPeer.growid, id_to_item(fish.id).raw_name);
-            peers(pPeer.recent_worlds.back(), PEER_SAME_WORLD, [&](ENetPeer &p)
-            {
-                send_varlist(&p, { "OnTalkBubble", pPeer.netid, message, 0u });
-            });
+            send_varlist(event.peer, { "OnTalkBubble", pPeer.netid, message, 0u });
             on::ConsoleMessage(event.peer, message);
 
             achievement_progress(event, ACH_FISH_CAUGHT);
@@ -190,10 +195,6 @@ namespace
         pPeer.fish_bite_until = {};
 
         broadcast_cast(event, pPeer, tile);
-        send_varlist(event.peer, {
-            "OnTalkBubble", pPeer.netid,
-            "`oWaiting for a bite... punch when you see the splash!``", 0u
-        });
     }
 
     /* punch while already fishing — reel in if bite is up, else cancel (no bait spent) */
@@ -211,13 +212,9 @@ namespace
             return;
         }
 
-        // @note punched too early / after the window — stop, keep bait
+        // @note punched too early / after the window — stop silently, keep bait
         clear_session(pPeer);
         broadcast_stop(event, pPeer);
-        send_varlist(event.peer, {
-            "OnTalkBubble", pPeer.netid,
-            "`oToo early! You reeled in empty-handed.``", 0u
-        });
     }
 }
 
@@ -258,10 +255,6 @@ void fishing_tick()
                 // @note missed the window — fish swam off; another splash may come (bait kept)
                 pPeer->fish_bite = false;
                 pPeer->fish_next_check = now + seconds(rng[{2, 4}]);
-                send_varlist(&peer, {
-                    "OnTalkBubble", pPeer->netid,
-                    "`oThe fish got away... keep waiting.``", 0u
-                });
             }
             continue;
         }
