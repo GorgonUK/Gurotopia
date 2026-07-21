@@ -478,7 +478,7 @@ long long peer::current_playtime_seconds() const
     if (!this->playtime_session_active)
         return this->playtime_seconds;
 
-    const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+    const long long elapsed = std::chrono::duration_cast<std::chrono::seconds>(
         std::chrono::steady_clock::now() - this->playtime_session_started
     ).count();
     return this->playtime_seconds + std::max(0ll, elapsed);
