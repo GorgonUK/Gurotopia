@@ -776,7 +776,7 @@ void send_action(ENetPeer& p, const std::string& action, const std::string& str)
     const std::string &fmt_action = std::format("action|{}\n", action);
     std::vector<u_char> data(sizeof(int) + fmt_action.length() + str.length(), 0x00);
     
-    data[0] = 3; // @note NET_MESSAGE_GAME_MESSAGE
+    data[0] = packet::GAME_MESSAGE;
     {
         const u_char *i8 = reinterpret_cast<const u_char*>(fmt_action.c_str());
         for (std::size_t i = 0ull; i < fmt_action.length(); ++i)
@@ -830,8 +830,8 @@ u_short modify_item_inventory(ENetEvent& event, ::slot slot)
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
     ::state state{.id = slot.id};
-    if (slot.count < 0) state.type = (slot.count*-1 << 16) | 0x000d; // @noote 0x00{}000d
-    else                state.type = (slot.count    << 24) | 0x000d; // @noote 0x{}00000d
+    if (slot.count < 0) state.type = (slot.count*-1 << 16) | packet::MODIFY_ITEM_INVENTORY; // @note 0x00{}000d
+    else                state.type = (slot.count    << 24) | packet::MODIFY_ITEM_INVENTORY; // @note 0x{}00000d
     state_visuals(*event.peer, std::move(state));
 
     return pPeer->emplace(::slot(slot.id, slot.count));
@@ -839,7 +839,7 @@ u_short modify_item_inventory(ENetEvent& event, ::slot slot)
 
 void item_change_object(ENetEvent& event, ::state state) 
 {
-    state.type = 0x0e; // @note PACKET_ITEM_CHANGE_OBJECT
+    state.type = packet::ITEM_CHANGE_OBJECT;
 
     state_visuals(*event.peer, std::move(state));
 }
@@ -954,7 +954,7 @@ void add_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world) // @todo
 void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &world) 
 {
     world.mark_dirty();
-    state.type = 05; // @note PACKET_SEND_TILE_UPDATE_DATA
+    state.type = packet::SEND_TILE_UPDATE_DATA;
     state.peer_state = peer_state::S_EXTENDED;
     std::vector<u_char> data = compress_state(state);
 
@@ -1125,7 +1125,7 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
 void send_particle_effect(ENetEvent &event, const ::pos& pos, ::pos speed, int id, float offset)
 {
     state_visuals(*event.peer, ::state{
-        .type = 0x11, // @note PACKET_SEND_PARTICLE_EFFECT
+        .type = packet::SEND_PARTICLE_EFFECT,
         .netid = id, // @todo figure out if this is correct, i just assumed from firework visuals
         .id = id,
         .pos = pos,

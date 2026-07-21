@@ -218,7 +218,7 @@ enum peer_state : int
 
 class state {
 public:
-    int packet_create{ 04 }; // @note NET_MESSAGE_GAME_PACKET
+    int packet_create{ packet::GAME_PACKET };
 
     int type{};
     int netid{};

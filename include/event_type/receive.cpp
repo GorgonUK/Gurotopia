@@ -6,9 +6,9 @@
 void receive(ENetEvent& event) 
 {
     std::span<const enet_uint8> data{event.packet->data, event.packet->dataLength};
-    switch (data[0ull]) 
+    switch (data[0ull])
     {
-        case 2: case 3: 
+        case packet::GENERIC_TEXT: case packet::GAME_MESSAGE:
         {
             std::string header{data.begin() + 4, data.end() - 1};
             puts(header.c_str());
@@ -28,7 +28,7 @@ void receive(ENetEvent& event)
                 i->second(event, header);
             break;
         }
-        case 4: 
+        case packet::GAME_PACKET:
         {
             if (event.packet->dataLength < sizeof(::state)) break;
 

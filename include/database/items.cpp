@@ -46,8 +46,8 @@ void decode_items()
 {
     const u_int size = std::filesystem::file_size("items.dat");
     im_data = compress_state(::state{
-        .type = 0x10, // @note PACKET_SEND_ITEM_DATABASE_DATA
-        .peer_state = peer_state::S_EXTENDED, 
+        .type = packet::SEND_ITEM_DATABASE_DATA,
+        .peer_state = peer_state::S_EXTENDED,
         .size = size
     });
     u_int pos = im_data.size(); // @note sizeof(::state)

@@ -116,7 +116,7 @@ void send_varlist(ENetPeer *peer, VariantList vlist, int netid, int delay)
     u_char *pMem = vlist.SerializeToMem(&size, NULL);
 
     std::vector<u_char> data = compress_state(::state{
-        .type = 01, // @note PACKET_CALL_FUNCTION
+        .type = packet::CALL_FUNCTION,
         .netid = netid,
         .peer_state = peer_state::S_EXTENDED,
 		.id = delay,

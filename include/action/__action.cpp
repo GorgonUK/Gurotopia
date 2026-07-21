@@ -30,30 +30,30 @@
 
 std::unordered_map<std::string, std::function<void(ENetEvent&, const std::string&)>> action_pool
 {
-    {"protocol", std::bind(&action::protocol, std::placeholders::_1, std::placeholders::_2)},
-    {"tankIDName", std::bind(&action::tankIDName, std::placeholders::_1, std::placeholders::_2)},
-    {"action|refresh_item_data", std::bind(&action::refresh_item_data, std::placeholders::_1, std::placeholders::_2)}, 
-    {"action|enter_game", std::bind(&action::enter_game, std::placeholders::_1, std::placeholders::_2)},
-    
-    {"action|dialog_return", std::bind(&action::dialog_return, std::placeholders::_1, std::placeholders::_2)},
-    {"action|friends", std::bind(&action::friends, std::placeholders::_1, std::placeholders::_2)},
+    {"protocol", &action::protocol},
+    {"tankIDName", &action::tankIDName},
+    {"action|refresh_item_data", &action::refresh_item_data},
+    {"action|enter_game", &action::enter_game},
 
-    {"action|join_request", std::bind(&action::join_request, std::placeholders::_1, std::placeholders::_2, "")},
-    {"action|quit_to_exit", std::bind(&action::quit_to_exit, std::placeholders::_1, std::placeholders::_2, false)},
-    {"action|respawn", std::bind(&action::respawn, std::placeholders::_1, std::placeholders::_2)},
-    {"action|respawn_spike", std::bind(&action::respawn, std::placeholders::_1, std::placeholders::_2)},
-    {"action|setSkin", std::bind(&action::setSkin, std::placeholders::_1, std::placeholders::_2)},
-    {"action|input", std::bind(&action::input, std::placeholders::_1, std::placeholders::_2)},
-    {"action|drop", std::bind(&action::drop, std::placeholders::_1, std::placeholders::_2)},
-    {"action|info", std::bind(&action::info, std::placeholders::_1, std::placeholders::_2)},
-    {"action|trash", std::bind(&action::trash, std::placeholders::_1, std::placeholders::_2)},
-    {"action|wrench", std::bind(&action::wrench, std::placeholders::_1, std::placeholders::_2)},
-    {"action|itemfavourite", std::bind(&action::itemfavourite, std::placeholders::_1, std::placeholders::_2)},
-    {"action|inventoryfavuitrigger", std::bind(&action::inventoryfavuitrigger, std::placeholders::_1, std::placeholders::_2)},
-    {"action|store", std::bind(&action::store, std::placeholders::_1, std::placeholders::_2)},
-    {"action|storenavigate", std::bind(&action::storenavigate, std::placeholders::_1, std::placeholders::_2)},
-    {"action|buy", std::bind(&action::buy, std::placeholders::_1, std::placeholders::_2, "")},
-    {"action|openPiggyBank", std::bind(&action::openPiggyBank, std::placeholders::_1, std::placeholders::_2)},
+    {"action|dialog_return", &action::dialog_return},
+    {"action|friends", &action::friends},
 
-    {"action|quit", std::bind(&action::quit, std::placeholders::_1, std::placeholders::_2)}
+    {"action|join_request", [](ENetEvent& e, const std::string& h){ action::join_request(e, h, ""); }},
+    {"action|quit_to_exit", [](ENetEvent& e, const std::string& h){ action::quit_to_exit(e, h, false); }},
+    {"action|respawn", &action::respawn},
+    {"action|respawn_spike", &action::respawn},
+    {"action|setSkin", &action::setSkin},
+    {"action|input", &action::input},
+    {"action|drop", &action::drop},
+    {"action|info", &action::info},
+    {"action|trash", &action::trash},
+    {"action|wrench", &action::wrench},
+    {"action|itemfavourite", &action::itemfavourite},
+    {"action|inventoryfavuitrigger", &action::inventoryfavuitrigger},
+    {"action|store", &action::store},
+    {"action|storenavigate", &action::storenavigate},
+    {"action|buy", [](ENetEvent& e, const std::string& h){ action::buy(e, h, ""); }},
+    {"action|openPiggyBank", &action::openPiggyBank},
+
+    {"action|quit", &action::quit}
 };
