@@ -52,10 +52,14 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
         pPeer->growid = growid_for_uid(pPeer->user_id);
 
     // @note game-session peer is a fresh reconnect after OnSendToServer; the
-    // inventory/gems/progress loaded on the login peer was discarded, so load
-    // it again here (before enter_game grants the starter kit).
+    // account metadata and progression loaded on the login peer were discarded,
+    // so load both again here (before enter_game grants the starter kit).
+    // This includes created_at, which the wrench menu uses for account age.
+    if (!pPeer->growid.empty())
+        pPeer->mysql_select_all();
     if (!pPeer->mysql_load_progress())
         fprintf(stderr, "[peer] failed to load progress for %s\n", pPeer->growid.c_str());
+    pPeer->start_playtime_session();
 
     // Prefer the country the client just reported (ISO code, e.g. "gb" / "us").
     // Persist it so later sessions still show the flag if the packet omits it.

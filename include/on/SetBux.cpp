@@ -44,10 +44,10 @@ void on::sync_piggy_bank(ENetEvent &event)
         "PiggyBankButton",
         1,
         std::format(
-            "{{\"active\":true,\"buttonAction\":\"openPiggyBank\",\"buttonState\":0,"
+            "{{\"active\":true,\"buttonAction\":\"openPiggyBank\",\"buttonState\":1,"
             "\"buttonTemplate\":\"BaseEventButton\",\"counter\":0,\"counterMax\":0,"
             "\"itemIdIcon\":0,\"name\":\"PiggyBankButton\",\"notification\":0,\"order\":20,"
-            "\"rcssClass\":\"piggybank\",\"text\":\"{}\"}}",
+            "\"rcssClass\":\"piggybank\",\"text\":\"{}\",\"visibilityFlag\":3}}",
             text
         )
     });

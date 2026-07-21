@@ -130,10 +130,11 @@ void tile_apply_damage(ENetEvent& event, state state, block &block, u_int value)
         world->mark_dirty();
 
     (block.fg == 0) ? ++block.hits[1] : ++block.hits[0];
-    state.type = (value << 24) | 0x000008; // @note 0x{}000008
+    state.type = (value << 24) | packet::TILE_APPLY_DAMAGE;
+    state.uid = static_cast<int>(pPeer->clothing[hand]); // @note equipped hand item (PACKET item_net_id)
     state.id = 6; // @note idk exactly
     state.netid = pPeer->netid;
-	state_visuals(*event.peer, std::move(state));
+    state_visuals(*event.peer, std::move(state));
 }
 
 u_short modify_item_inventory(ENetEvent& event, ::slot slot)

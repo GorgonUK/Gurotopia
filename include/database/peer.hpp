@@ -172,6 +172,29 @@ public:
     /* personal notebook — 5 pages, max 256 chars each */
     std::array<std::string, 5ull> notebook_pages{};
 
+    /* cumulative authenticated playtime, persisted in seconds */
+    long long playtime_seconds{};
+    std::chrono::steady_clock::time_point playtime_session_started{};
+    bool playtime_session_active{};
+    void start_playtime_session();
+    void checkpoint_playtime();
+    long long current_playtime_seconds() const;
+
+    /* title / wrench cosmetics (OnNameChanged JSON) */
+    bool title_old_timer{};
+    int wrench_icon_id{-1};
+    int wrench_foreground_id{-1};
+    bool wrench_foreground_can_rotate{};
+
+    /* wardrobe preset slot "one" — 10 clothing ids matching clothing[] order */
+    std::array<short, 10ull> wardrobe_preset_one{};
+
+    /* transient Trade-Scan selection (not persisted) */
+    short trade_scan_selected_item{};
+
+    /* Marvelous Missions last tab (1 or 2) */
+    u_char collection_quests_tab{1};
+
     /* timed fishing session (not persisted) — cast bait, wait for splash, punch to reel */
     bool fishing{};
     bool fish_bite{}; // @note splash is up; punch now to catch

@@ -99,7 +99,7 @@ bool peer::mysql_load_progress()
     ::hStmt hStmt{
         "SELECT gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
         "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest, "
-        "online_status, notebook, piggy_gems "
+        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds "
         "FROM peer_state WHERE uid = ? LIMIT 1"
     };
 
@@ -112,6 +112,7 @@ bool peer::mysql_load_progress()
 
     signed gems = 0;
     signed piggy_gems = 0;
+    long long playtime_seconds = 0;
     unsigned level = 1, xp = 0, slot_size = 16;
     unsigned role = 0, skin_color = 2527912447u, hair_color = 4278255615u;
     unsigned fires_removed = 0, gbc_pity = 0, initialized = 0;
@@ -123,12 +124,13 @@ bool peer::mysql_load_progress()
     std::vector<u_char> ach_blob(64, 0);
     std::vector<u_char> quest_blob(16, 0);
     std::vector<u_char> notebook_blob;
-    unsigned long clothing_len = 0, fav_len = 0, country_len = 0, recent_len = 0, my_len = 0, ach_len = 0, quest_len = 0, notebook_len = 0;
+    std::vector<u_char> wardrobe_blob(20, 0);
+    unsigned long clothing_len = 0, fav_len = 0, country_len = 0, recent_len = 0, my_len = 0, ach_len = 0, quest_len = 0, notebook_len = 0, wardrobe_len = 0;
 
     fav_blob.resize(512);
     notebook_blob.resize(2048);
 
-    MYSQL_BIND results[20]{};
+    MYSQL_BIND results[22]{};
     results[0]  = make_bind_out(gems);
     results[1]  = make_bind_out(level);
     results[2]  = make_bind_out(xp);
@@ -150,6 +152,8 @@ bool peer::mysql_load_progress()
     results[17] = make_bind_out(online_status);
     results[18] = make_bind_out_blob(notebook_blob, notebook_len);
     results[19] = make_bind_out(piggy_gems);
+    results[20] = make_bind_out_blob(wardrobe_blob, wardrobe_len);
+    results[21] = make_bind_out(playtime_seconds);
 
     if (mysql_stmt_bind_result(hStmt.pStmt, results))
     {
@@ -186,9 +190,11 @@ bool peer::mysql_load_progress()
     trim_blob(ach_blob, ach_len);
     trim_blob(quest_blob, quest_len);
     trim_blob(notebook_blob, notebook_len);
+    trim_blob(wardrobe_blob, wardrobe_len);
 
     this->gems = gems;
     this->piggy_gems = std::clamp(piggy_gems, 0, PIGGY_CAP);
+    this->playtime_seconds = std::max(0ll, playtime_seconds);
     this->level = { static_cast<u_short>(level), static_cast<u_short>(xp) };
     this->slot_size = static_cast<short>(slot_size);
     this->role = static_cast<u_char>(role);
@@ -240,6 +246,13 @@ bool peer::mysql_load_progress()
             offset += len;
         }
     }
+
+    this->wardrobe_preset_one.fill(0);
+    if (wardrobe_blob.size() >= sizeof(short) * this->wardrobe_preset_one.size())
+        std::memcpy(
+            this->wardrobe_preset_one.data(), wardrobe_blob.data(),
+            sizeof(short) * this->wardrobe_preset_one.size()
+        );
 
     // '\n'-joined world names -> fill the fixed array from the back so that
     // .back() stays the most-recent entry (matches join_request/tile_change).
@@ -298,6 +311,8 @@ bool peer::mysql_save_progress()
     if (this->user_id <= 0 || this->growid.empty())
         return false;
 
+    this->checkpoint_playtime();
+
     if (!mysql_begin())
         return false;
 
@@ -340,6 +355,11 @@ bool peer::mysql_save_progress()
             std::memcpy(notebook_blob.data() + at + sizeof(u_short), page.data(), len);
     }
 
+    std::vector<u_char> wardrobe_blob(sizeof(short) * this->wardrobe_preset_one.size(), 0);
+    std::memcpy(
+        wardrobe_blob.data(), this->wardrobe_preset_one.data(), wardrobe_blob.size()
+    );
+
     signed gems = this->gems;
     signed piggy_gems = this->piggy_gems;
     unsigned level = this->level.front();
@@ -357,8 +377,8 @@ bool peer::mysql_save_progress()
         "INSERT INTO peer_state "
         "(uid, gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
         "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest, "
-        "online_status, notebook, piggy_gems) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON DUPLICATE KEY UPDATE "
         // @note role deliberately NOT updated: the DB is authoritative for it, so a
         // manual `UPDATE peer_state SET role=1` can't be clobbered by a session save.
@@ -368,10 +388,11 @@ bool peer::mysql_save_progress()
         "fires_removed=VALUES(fires_removed), gbc_pity=VALUES(gbc_pity), initialized=VALUES(initialized), "
         "recent_worlds=VALUES(recent_worlds), my_worlds=VALUES(my_worlds), achievements=VALUES(achievements), "
         "quest=VALUES(quest), online_status=VALUES(online_status), notebook=VALUES(notebook), "
-        "piggy_gems=VALUES(piggy_gems)"
+        "piggy_gems=VALUES(piggy_gems), wardrobe_preset=VALUES(wardrobe_preset), "
+        "playtime_seconds=VALUES(playtime_seconds)"
     };
 
-    MYSQL_BIND params[21] = {
+    MYSQL_BIND params[23] = {
         make_bind_in(this->user_id),
         make_bind_in(gems),
         make_bind_in(level),
@@ -392,7 +413,9 @@ bool peer::mysql_save_progress()
         make_bind_in_blob(quest_blob),
         make_bind_in(online_status),
         make_bind_in_blob(notebook_blob),
-        make_bind_in(piggy_gems)
+        make_bind_in(piggy_gems),
+        make_bind_in_blob(wardrobe_blob),
+        make_bind_in(this->playtime_seconds)
     };
 
     if (mysql_stmt_bind_param(upsert.pStmt, params) || mysql_stmt_execute(upsert.pStmt))
@@ -441,12 +464,41 @@ bool peer::mysql_save_progress()
     return true;
 }
 
+void peer::start_playtime_session()
+{
+    if (this->playtime_session_active)
+        return;
+
+    this->playtime_session_started = std::chrono::steady_clock::now();
+    this->playtime_session_active = true;
+}
+
+long long peer::current_playtime_seconds() const
+{
+    if (!this->playtime_session_active)
+        return this->playtime_seconds;
+
+    const auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::steady_clock::now() - this->playtime_session_started
+    ).count();
+    return this->playtime_seconds + std::max(0ll, elapsed);
+}
+
+void peer::checkpoint_playtime()
+{
+    if (!this->playtime_session_active)
+        return;
+
+    this->playtime_seconds = this->current_playtime_seconds();
+    this->playtime_session_started = std::chrono::steady_clock::now();
+}
+
 void autosave_peers()
 {
     peers("", peer_condition::PEER_ALL, [](ENetPeer &p)
     {
         ::peer *pPeer = static_cast<::peer*>(p.data);
-        if (pPeer && pPeer->dirty)
+        if (pPeer && (pPeer->dirty || pPeer->playtime_session_active))
             pPeer->mysql_save_progress();
     });
 }

@@ -3,101 +3,123 @@
 #include "database/achievements.hpp"
 #include "wrench.hpp"
 
+void action::send_self_wrench_menu(ENetEvent &event, int netid)
+{
+    ::peer &pPeer = peer_of(event);
+    ::peer *pOthers = &pPeer;
+    if (pPeer.netid != netid)
+    {
+        ENetPeer *target = peer_by_netid(pPeer.recent_worlds.back(), netid);
+        if (target == nullptr) return;
+        pOthers = &peer_of(*target);
+    }
+
+    u_short lvl = pOthers->level.front();
+    const double playtime_hours =
+        static_cast<double>(pOthers->current_playtime_seconds()) / 3600.0;
+    const long long account_days = pOthers->created_at > 0
+        ? std::max(0ll, static_cast<long long>(
+            (std::time(nullptr) - pOthers->created_at) / (24 * 60 * 60)
+        ))
+        : 0;
+    send_varlist(event.peer, {
+        "OnDialogRequest",
+        ::create_dialog()
+            .embed_data("netID", netid)
+            .add_popup_name("WrenchMenu")
+            .set_default_color("`o")
+            .add_player_info(std::format("`{}{}``", pOthers->prefix, pOthers->growid), std::to_string(lvl), pOthers->level.back(), 50 * (lvl * lvl + 2))
+            .add_spacer("small")
+            .add_spacer("small")
+            .add_button("renew_pvp_license", "Get Card Battle License")
+            .add_spacer("small")
+            .set_custom_spacing(5, 10)
+            .add_custom_button("open_personlize_profile", "image:interface/large/gui_wrench_personalize_profile.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("set_online_status", std::format(
+                "image:interface/large/gui_wrench_online_status_{}.rttex;image_size:400,260;width:0.19;",
+                (pOthers->online_status == 1) ? "3red" :
+                (pOthers->online_status == 2) ? "2yellow" : "1green"
+            ))
+            .add_custom_button("billboard_edit", "image:interface/large/gui_wrench_edit_billboard.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("wardrobe_customization", "image:interface/large/gui_wrench_wardrobe.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("seed_diary_customization", "image:interface/large/gui_wrench_seed_diary.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("notebook_edit", "image:interface/large/gui_wrench_notebook.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("goals", "image:interface/large/gui_wrench_goals_quests.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("bonus", "image:interface/large/gui_wrench_daily_bonus_active.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("my_worlds", "image:interface/large/gui_wrench_my_worlds.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("alist", "image:interface/large/gui_wrench_achievements.rttex;image_size:400,260;width:0.19;")
+            .add_custom_label(std::format("({}/{})", achievements_completed(*pOthers), (int)ACH_COUNT), "target:alist;top:0.72;left:0.5;size:small")
+            .add_custom_button("emojis", "image:interface/large/gui_wrench_growmojis.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("marvelous_missions", "image:interface/large/gui_wrench_marvelous_missions.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("title_edit", "image:interface/large/gui_wrench_title.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("trade_scan", "image:interface/large/gui_wrench_trades.rttex;image_size:400,260;width:0.19;")
+            .embed_data("netID", netid)
+            .add_custom_button("pets", "image:interface/large/gui_wrench_battle_pets.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("wrench_customization", "image:interface/large/gui_wrench_customization.rttex;image_size:400,260;width:0.19;")
+            .add_custom_button("open_worldlock_storage", "image:interface/large/gui_wrench_auction.rttex;image_size:400,260;width:0.19;")
+            .add_custom_break()
+            .add_spacer("small")
+            .set_custom_spacing(0, 0)
+            .add_spacer("small")
+            .add_textbox(std::format("Surgeon Level: {}", pOthers->ach_progress[ACH_SURGERIES_DONE]))
+            .add_spacer("small")
+            .add_textbox("`wActive effects:``")
+            .add_spacer("small")
+            .add_smalltext(std::format("Fires Put Out: {}", pOthers->fires_removed))
+            .add_spacer("small")
+            .add_textbox(std::format("`oYou have `w{}`` backpack slots.``", pOthers->slot_size))
+            .add_textbox(std::format("`oCurrent world: `w{}`` (`w{}``, `w{}``) (`w0`` person)````",
+                                    pOthers->recent_worlds.back(), pOthers->pos.by_32(true).x_int(), pOthers->pos.by_32(true).y_int()))
+            .add_textbox("`oYou are standing on the note \"A\".``")
+            .add_spacer("small")
+            .add_textbox(std::format(
+                "`oTotal time played is `w{:.1f}`` hours.  "
+                "This account was created `w{}`` days ago.``",
+                playtime_hours, account_days
+            ))
+            .add_spacer("small")
+            .add_quick_exit()
+            .end_dialog("popup", "", "Continue")
+    });
+}
+
 void action::wrench(ENetEvent& event, const std::string& header) 
 {
     std::vector<std::string> pipes = readch(header, '|');
-    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::peer &pPeer = peer_of(event);
 
     auto field = std::ranges::find(pipes, "netid");
     if (field != pipes.end() && std::next(field) != pipes.end() && !std::next(field)->empty())
     {
         const short netid = atoi(std::next(field)->c_str());
-        peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [event, pPeer, netid](ENetPeer& peer) 
+        peers(pPeer.recent_worlds.back(), PEER_SAME_WORLD, [event, &pPeer, netid](ENetPeer& peer) mutable
         {
-            ::peer *pOthers = static_cast<::peer*>(peer.data);
-            if (pOthers->netid == netid)
+            ::peer &pOthers = peer_of(peer);
+            if (pOthers.netid == netid)
             {
-                u_short lvl = pOthers->level.front();
-                /* wrench yourself */
-                if (pOthers->user_id == pPeer->user_id)
+                if (pOthers.user_id == pPeer.user_id)
                 {
-                    send_varlist(event.peer, {
-                        "OnDialogRequest",
-                        ::create_dialog()
-                            .embed_data("netID", netid)
-                            .add_popup_name("WrenchMenu")
-                            .set_default_color("`o")
-                            .add_player_info(std::format("`{}{}``", pOthers->prefix, pOthers->growid), std::to_string(lvl), pOthers->level.back(), 50 * (lvl * lvl + 2))
-                            .add_spacer("small")
-                            .add_spacer("small")
-                            .add_button("renew_pvp_license", "Get Card Battle License")
-                            .add_spacer("small")
-                            .set_custom_spacing(5, 10)
-                            .add_custom_button("open_personlize_profile", "image:interface/large/gui_wrench_personalize_profile.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("set_online_status", std::format(
-                                "image:interface/large/gui_wrench_online_status_{}.rttex;image_size:400,260;width:0.19;",
-                                (pOthers->online_status == 1) ? "3red" :
-                                (pOthers->online_status == 2) ? "2yellow" : "1green"
-                            ))
-                            .add_custom_button("billboard_edit", "image:interface/large/gui_wrench_edit_billboard.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("wardrobe_customization", "image:interface/large/gui_wrench_wardrobe.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("seed_diary_customization", "image:interface/large/gui_wrench_seed_diary.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("notebook_edit", "image:interface/large/gui_wrench_notebook.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("goals", "image:interface/large/gui_wrench_goals_quests.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("bonus", "image:interface/large/gui_wrench_daily_bonus_active.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("my_worlds", "image:interface/large/gui_wrench_my_worlds.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("alist", "image:interface/large/gui_wrench_achievements.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_label(std::format("({}/{})", achievements_completed(*pOthers), (int)ACH_COUNT), "target:alist;top:0.72;left:0.5;size:small")
-                            .add_custom_button("emojis", "image:interface/large/gui_wrench_growmojis.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("marvelous_missions", "image:interface/large/gui_wrench_marvelous_missions.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("title_edit", "image:interface/large/gui_wrench_title.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("trade_scan", "image:interface/large/gui_wrench_trades.rttex;image_size:400,260;width:0.19;")
-                            .embed_data("netID", netid) // @todo research why rgt adds this twice···
-                            .add_custom_button("pets", "image:interface/large/gui_wrench_battle_pets.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("wrench_customization", "image:interface/large/gui_wrench_customization.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_button("open_worldlock_storage", "image:interface/large/gui_wrench_auction.rttex;image_size:400,260;width:0.19;")
-                            .add_custom_break()
-                            .add_spacer("small")
-                            .set_custom_spacing(0, 0) // @todo research why rgt adds this too. is 0, 0 unaffecting? or is this resetting the previous 5, 10 spacing
-                            .add_spacer("small")
-                            .add_textbox(std::format("Surgeon Level: {}", pOthers->ach_progress[ACH_SURGERIES_DONE]))
-                            .add_spacer("small")
-                            .add_textbox("`wActive effects:``")
-                            /* @todo handle peer's effects */
-                            .add_spacer("small")
-                            .add_smalltext(std::format("Fires Put Out: {}", pOthers->fires_removed))
-                            .add_spacer("small")
-                            .add_textbox(std::format("`oYou have `w{}`` backpack slots.``", pOthers->slot_size))
-                            .add_textbox(std::format("`oCurrent world: `w{}`` (`w{}``, `w{}``) (`w0`` person)````", 
-                                                    pOthers->recent_worlds.back(), pOthers->pos.by_32(true).x_int(), pOthers->pos.by_32(true).y_int()))
-                            .add_textbox("`oYou are standing on the note \"A\".``")
-                            .add_spacer("small")
-                            .add_textbox("`oTotal time played is `w0.0`` hours.  This account was created `w0`` days ago.``")
-                            .add_spacer("small")
-                            .add_quick_exit()
-                            .end_dialog("popup", "", "Continue")
-                    });
+                    action::send_self_wrench_menu(event, netid);
                 }
-                /* wrench someone else */
                 else
                 {
-                    auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
-                    const bool is_owner = world != worlds.end() && world->owner == pPeer->user_id 
-                        && pOthers->user_id != world->owner && !pOthers->role;
+                    auto world = std::ranges::find(worlds, pPeer.recent_worlds.back(), &::world::name);
+                    const bool is_owner = world != worlds.end() && world->owner == pPeer.user_id
+                        && pOthers.user_id != world->owner && !pOthers.role;
 
                     ::create_dialog dialog;
                     dialog
                         .embed_data("netID", netid)
                         .add_popup_name("WrenchMenu")
                         .set_default_color("`o")
-                        .add_label_with_icon("big", std::format("`{}{} (`2{}``)``", pOthers->prefix, pOthers->growid, lvl), 18)
+                        .add_label_with_icon("big", std::format("`{}{} (`2{}``)``", pOthers.prefix, pOthers.growid, pOthers.level.front()), 18)
                         .embed_data("netID", netid)
                         .add_spacer("small")
-                        .add_achieve(std::to_string(achievements_completed(*pOthers)))
+                        .add_achieve(std::to_string(achievements_completed(pOthers)))
                         .add_custom_margin(75, -70.85)
                         .add_custom_margin(-75, 70.85)
                         .add_spacer("small")
-                        .add_label("small", std::format("`1Achievements:`` {}/{}", achievements_completed(*pOthers), (int)ACH_COUNT))
+                        .add_label("small", std::format("`1Achievements:`` {}/{}", achievements_completed(pOthers), (int)ACH_COUNT))
                         .add_spacer("small")
                         .add_label("small", "`1Account Age:`` 0 days")
                         .add_spacer("small")
@@ -109,7 +131,7 @@ void action::wrench(ENetEvent& event, const std::string& header)
                         .add_button("show_clothes", "`wView worn clothes``")
                         .add_button("ignore_player", "`wIgnore Player``")
                         .add_button("report_player", "`wReport Player``");
-                    if (std::ranges::find(pPeer->slots, 4296/*Surg-E*/, &::slot::id) != pPeer->slots.end())
+                    if (std::ranges::find(pPeer.slots, 4296/*Surg-E*/, &::slot::id) != pPeer.slots.end())
                         dialog.add_button("surgery_start", "`wPerform Surgery``");
                     if (is_owner)
                         dialog
@@ -125,7 +147,7 @@ void action::wrench(ENetEvent& event, const std::string& header)
                         dialog.end_dialog("popup", "", "Continue")
                     });
                 }
-                return; // @note early exit else iteration will continue for EVERYONE in the world.
+                return;
             }
         });
     }

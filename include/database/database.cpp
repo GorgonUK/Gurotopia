@@ -84,6 +84,12 @@ void create_table_if_not_exist()
     // migration: piggy bank balance (gems earned toward the 1.5M bank)
     run_query("ALTER TABLE peer_state ADD COLUMN piggy_gems INT NOT NULL DEFAULT 0", /*silent_dup=*/true);
 
+    // migration: wardrobe preset "one" (10 clothing item ids as little-endian shorts)
+    run_query("ALTER TABLE peer_state ADD COLUMN wardrobe_preset BLOB NOT NULL", /*silent_dup=*/true);
+
+    // migration: cumulative authenticated playtime in seconds
+    run_query("ALTER TABLE peer_state ADD COLUMN playtime_seconds BIGINT NOT NULL DEFAULT 0", /*silent_dup=*/true);
+
     run_query(R"(
         CREATE TABLE IF NOT EXISTS peer_inventory (
             uid INT NOT NULL,

@@ -42,6 +42,7 @@ namespace packet
         CALL_FUNCTION               = 0x01, // VariantList (On*)
         SEND_MAP_DATA               = 0x04, // full world blob (join_request)
         SEND_TILE_UPDATE_DATA       = 0x05, // single tile refresh
+        TILE_APPLY_DAMAGE           = 0x08,
         SEND_INVENTORY_STATE        = 0x09,
         MODIFY_ITEM_INVENTORY       = 0x0d,
         ITEM_CHANGE_OBJECT          = 0x0e, // spawn / move / remove a world drop

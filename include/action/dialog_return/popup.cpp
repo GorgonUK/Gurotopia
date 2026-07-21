@@ -5,9 +5,15 @@
 #include "database/achievements.hpp"
 #include "tools/create_dialog.hpp"
 #include "database/quests.hpp"
+#include "on/EmoticonDataChanged.hpp"
 #include "surgery.hpp"
 #include "trade.hpp"
 #include "paginated_personal_notebook.hpp"
+#include "title_wrench.hpp"
+#include "petwrench.hpp"
+#include "trade_scan.hpp"
+#include "battlepass.hpp"
+#include "collection_quests.hpp"
 
 #include "popup.hpp"
 
@@ -103,6 +109,74 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
                 to_char(!pPeer->billboard.perItem)
             )
         });
+    }
+    else if (hPipe["buttonClicked"] == "emojis")
+    {
+        ::create_dialog dialog;
+        dialog
+            .set_default_color("`o")
+            .add_label_with_icon("big", "Growmojis", 1366)
+            .add_popup_name("Growmojis")
+            .add_spacer("small");
+
+        for (const auto &entry : on::emoticon_catalog())
+        {
+            if (entry.unlocked)
+                dialog.add_smalltext_forced(std::format(" ({}) ", entry.name));
+        }
+        dialog.add_spacer("small");
+
+        bool locke_hint_added = false;
+        for (const auto &entry : on::emoticon_catalog())
+        {
+            if (entry.unlocked)
+                continue;
+
+            const bool locke_group =
+                entry.unlock_hint.find("Locke") != std::string_view::npos;
+            if (!locke_group || !locke_hint_added)
+                dialog.add_smalltext(std::string{ entry.unlock_hint });
+
+            dialog.add_smalltext_forced_alpha(
+                std::format(" ({}) ", entry.name), 0.5f
+            );
+            if (!locke_group)
+                dialog.add_spacer("small");
+            locke_hint_added = locke_hint_added || locke_group;
+        }
+
+        send_varlist(event.peer, {
+            "OnDialogRequest",
+            dialog.end_dialog_with_quick_exit("goalslist", "", "Back")
+        });
+    }
+    else if (hPipe["buttonClicked"] == "title_edit")
+    {
+        send_title_edit_dialog(event);
+    }
+    else if (hPipe["buttonClicked"] == "wrench_customization")
+    {
+        send_wrench_customization_dialog(event);
+    }
+    else if (hPipe["buttonClicked"] == "wardrobe_customization")
+    {
+        send_varlist(event.peer, { "OnDialogRequestRML", "show_wardrobe_main_ui" });
+    }
+    else if (hPipe["buttonClicked"] == "pets")
+    {
+        send_petwrench_tab(event, 0);
+    }
+    else if (hPipe["buttonClicked"] == "trade_scan")
+    {
+        send_trade_scan_main(event);
+    }
+    else if (hPipe["buttonClicked"] == "bonus")
+    {
+        send_battlepass_tasks(event);
+    }
+    else if (hPipe["buttonClicked"] == "marvelous_missions")
+    {
+        send_collection_quests(event, 1);
     }
     else if (hPipe["buttonClicked"] == "seed_diary_customization")
     {

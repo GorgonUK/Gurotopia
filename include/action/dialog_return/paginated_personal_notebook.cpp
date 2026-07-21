@@ -23,7 +23,11 @@ void send_notebook_view(ENetEvent &event, int page_num)
             (i == page_num) ? 1 : 0
         ));
     }
-    tabs.append("end_custom_tabs|\n");
+    tabs.append(
+        "end_custom_tabs|\n"
+        "add_custom_button|_dialog_width_anchor|"
+        "state:disabled;opacity:0;display:block;height:0;min_width:650;|\n"
+    );
 
     const std::string &note = pPeer->notebook_pages[static_cast<std::size_t>(page_num)];
     const std::string body = note.empty() ? "`4No saved note to display.``" : note;

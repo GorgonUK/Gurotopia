@@ -20,6 +20,11 @@
 #include "combiner.hpp"
 #include "set_online_status.hpp"
 #include "paginated_personal_notebook.hpp"
+#include "title_wrench.hpp"
+#include "petwrench.hpp"
+#include "trade_scan.hpp"
+#include "battlepass.hpp"
+#include "collection_quests.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -61,4 +66,20 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"set_online_status", &set_online_status},
     {"paginated_personal_notebook_view", &paginated_personal_notebook_view},
     {"paginated_personal_notebook_edit", &paginated_personal_notebook_edit},
+
+    {"title_edit", &title_edit},
+    {"wrench_customization_select", &wrench_customization_select},
+
+    {"petwrench", &petwrench},
+
+    {"trade_scan_main_ui", &trade_scan},
+    {"search_list_ui", &trade_scan},
+    {"trade_scan_price_check_ui", &trade_scan},
+    {"buy_credits_ui", &trade_scan},
+
+    {"battlepass_tasks", &battlepass},
+    {"battlepass_rewards", &battlepass},
+    {"battlepass_leaderboard", &battlepass},
+
+    {"collectionQuests", &collection_quests},
 };
