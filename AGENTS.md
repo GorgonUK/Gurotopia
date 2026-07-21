@@ -57,3 +57,9 @@ New tank types from captures need a new handler + pool entry.
 ## Code style
 
 Match existing files in the same folder (includes, naming, `pch.hpp`). Prefer minimal diffs focused on the feature brief.
+
+**Before adding code, check `ARCHITECTURE.md`** for the module map and the reusable-helper index —
+reuse `peer_of`, `current_world`, `peer_by_netid/uid`, `inventory_count/has`, `give_to_backpack`,
+`spill_drops`, `in_bounds`, the `packet::` protocol constants, and the `create_dialog` builder rather
+than re-deriving them. `database/world*.cpp` is split by concern (runtime ops / serialize / tile_lock /
+world_gen) — put new world code in the matching file. Refactor status lives in `REFACTOR.md`.

@@ -32,12 +32,36 @@ Legend: ✅ done · 🔜 planned · ⚠️ needs in-client (GTProxy) verificatio
 - 🔜 split `state/tile_change.cpp` (1001 lines) into `handle_punch/wrench/place` + per-type tables
 
 ## Tier 3 — structural (⚠️ build + in-client verification required)
-- 🔜 ⚠️ shared tile-extra serializer used by both `world.cpp` and `join_request.cpp`
-- 🔜 `peer` component split — start with non-persisted `FishingSession` / `TradeSession`
-- 🔜 slim `pch.hpp`; move `host` / `state` out of `peer.hpp`
-- 🔜 `dialog builder`: add missing widgets, migrate raw-string dialogs
+These are the highest-value remaining refactors, but each is best executed **with a compiler and
+a GTProxy client in the loop** — they either touch byte-exact wire format or fan out across many
+files. Doing them "blind" risks a silent runtime desync that CI's compile check cannot catch.
+Precise steps below so they can be picked up on a machine that can build.
+
+- 🔜 ⚠️ **Shared tile-extra serializer** (highest payoff, highest risk). `world.cpp::send_tile_update`
+  (the `switch(item.type)` that appends per-tile "extra" bytes) and the equivalent cascade in
+  `action/join_request.cpp` are two hand-kept copies of the same binary layout.
+  Steps: (1) diff the two switches to confirm they are byte-identical *today* (they may have
+  drifted). (2) Extract `serialize_tile_extra(ByteWriter&, const world&, const block&, pos)` into
+  a new `database/tile_extra.cpp` (declare in `world.hpp`). (3) Point both call sites at it.
+  Verify each of the 11 tile types (lock/door/sign/mailbox/bulletin/donation/xenonite/spirit-board/
+  seed/provider/display/vending/magplant) renders correctly on join AND on single-tile update.
+- 🔜 **`peer` component split** — group the non-persisted runtime fields into nested structs:
+  `FishingSession { active, bite, tile, bait, next_check, bite_until }` and
+  `TradeSession { with_netid, offer, ready, confirmed }`. Touched by ~5 files each
+  (`state/fishing.cpp`, `state/movement.cpp`, `state/item_activate.cpp`, `action/quit_to_exit.cpp`,
+  `action/dialog_return/trade.cpp`). Compile-verifiable but broad field renames.
+- 🔜 ⚠️ **Split `state/tile_change.cpp`** (~960-line function) into `handle_punch` / `handle_wrench` /
+  `handle_place` (maps 1:1 to the `state.id == 18 / 32 / else` branch), then per-`type` handler
+  tables mirroring `state_pool`. Extract remaining inline wrench dialogs (lock/door/sign/entrance)
+  to helpers like the display/vending ones already are.
+- 🔜 slim `pch.hpp`; move `host` / `state` out of `peer.hpp` into a `net.hpp` / `protocol/state.hpp`.
+- 🔜 `create_dialog`: add `add_checkbox` / `add_text_box_input` / custom-tabs; migrate the raw-string
+  dialogs (`popup`, `paginated_personal_notebook`, `buy`, owner branch of `vending`).
+- 🔜 consolidate config loaders (`https/server_data.cpp`, `database/server_config.cpp`,
+  `database/database_config.cpp`) behind one key/value loader; unify the 3 base64 impls
+  (`tools/string.cpp`, `tools/crypt.cpp`) — security-sensitive, round-trip a known hash.
 
 ## Discoverability (for Cursor / new clones)
-- 🔜 `ARCHITECTURE.md` — module map + "reuse these helpers" index
-- 🔜 `.cursor/rules/` — point the assistant at the shared helpers before writing new code
-- 🔜 refresh `AGENTS.md` with the new module layout
+- ✅ `ARCHITECTURE.md` — module map + "reuse these helpers" index
+- ✅ `.cursor/rules/code-organization.mdc` — steers the assistant to shared helpers + pool registration
+- ✅ `AGENTS.md` — points at `ARCHITECTURE.md` and the split `world*.cpp` layout
