@@ -446,7 +446,7 @@ std::vector<::pos> claim_tile_lock_area(::world &world, ::pos lock_pos, int capa
 
     auto try_push = [&](int x, int y)
     {
-        if (x < 0 || y < 0 || x >= 100 || y >= 60) return;
+        if (!in_bounds(x, y)) return;
         const int idx = cord(x, y);
         if (!visited.insert(idx).second) return;
 
@@ -524,7 +524,7 @@ void apply_tile_lock(::world &world, ::tile_lock &lock)
 {
     for (const ::pos &p : lock.area)
     {
-        if (p.x_int() < 0 || p.y_int() < 0 || p.x_int() >= 100 || p.y_int() >= 60) continue;
+        if (!in_bounds(p)) continue;
         world.blocks[cord(p.x_int(), p.y_int())].state[2] |= S_LOCKED;
     }
     world.mark_dirty();
@@ -537,7 +537,7 @@ void remove_tile_lock(::world &world, ::pos lock_pos)
 
     for (const ::pos &p : it->area)
     {
-        if (p.x_int() < 0 || p.y_int() < 0 || p.x_int() >= 100 || p.y_int() >= 60) continue;
+        if (!in_bounds(p)) continue;
         // only clear if no other lock still covers this tile
         ::pos check = p;
         bool still = false;
@@ -771,6 +771,17 @@ void note_object_uid(u_int uid)
     }
 }
 
+::world* current_world(const ::peer& p)
+{
+    auto it = std::ranges::find(worlds, p.recent_worlds.back(), &::world::name);
+    return (it != worlds.end()) ? &*it : nullptr;
+}
+
+::world* current_world(ENetEvent& event)
+{
+    return current_world(peer_of(event));
+}
+
 void send_action(ENetPeer& p, const std::string& action, const std::string& str) 
 {
     const std::string &fmt_action = std::format("action|{}\n", action);
@@ -802,7 +813,7 @@ void send_data(ENetPeer &peer, const std::vector<u_char> &&data)
 
 void state_visuals(ENetPeer &peer, state &&state) 
 {
-    ::peer *pPeer = static_cast<::peer*>(peer.data);
+    ::peer *pPeer = &peer_of(peer);
 
     peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [&](ENetPeer &p) 
     {
@@ -812,10 +823,9 @@ void state_visuals(ENetPeer &peer, state &&state)
 
 void tile_apply_damage(ENetEvent& event, state state, block &block, u_int value)
 {
-    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::peer *pPeer = &peer_of(event);
 
-    auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
-    if (world != worlds.end())
+    if (::world* world = current_world(*pPeer))
         world->mark_dirty();
 
     (block.fg == 0) ? ++block.hits[1] : ++block.hits[0];
@@ -827,7 +837,7 @@ void tile_apply_damage(ENetEvent& event, state state, block &block, u_int value)
 
 u_short modify_item_inventory(ENetEvent& event, ::slot slot)
 {   
-    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::peer *pPeer = &peer_of(event);
 
     ::state state{.id = slot.id};
     if (slot.count < 0) state.type = (slot.count*-1 << 16) | packet::MODIFY_ITEM_INVENTORY; // @note 0x00{}000d
@@ -865,10 +875,9 @@ void merge_object(ENetEvent& event, ::slot slot, const ::pos& pos, ::world &worl
 
 void remove_object(ENetEvent& event, signed uid)
 {
-    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::peer *pPeer = &peer_of(event);
 
-    auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
-    if (world != worlds.end())
+    if (::world* world = current_world(*pPeer))
         world->mark_dirty();
 
     item_change_object(event, ::state{
@@ -880,10 +889,7 @@ void remove_object(ENetEvent& event, signed uid)
 
 void despawn_object(ENetEvent& event, signed uid)
 {
-    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
-
-    auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
-    if (world != worlds.end())
+    if (::world* world = current_world(event))
         world->mark_dirty();
 
     // @note netid -1: client deletes the drop without treating it as a player pickup
@@ -1115,7 +1121,7 @@ void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &
         }
     }
 
-    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::peer *pPeer = &peer_of(event);
     peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [&](ENetPeer& p) 
     {
         send_data(p, std::vector<u_char>(data)); // @note copy — move would empty after the first peer
@@ -1141,7 +1147,7 @@ void remove_fire(ENetEvent &event, state state, ::block &block, ::world& world)
     block.state[3] &= ~S_FIRE;
     send_tile_update(event, state, block, world);
 
-    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
+    ::peer *pPeer = &peer_of(event);
 
     if (++pPeer->fires_removed % 100 == 0) 
     {

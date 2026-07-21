@@ -562,6 +562,37 @@ std::vector<ENetPeer*> peers(const std::string &world, peer_condition condition,
     return _peers;
 }
 
+ENetPeer* peer_by_netid(const std::string& world, int netid)
+{
+    ENetPeer* target = nullptr;
+    peers(world, peer_condition::PEER_SAME_WORLD, [&](ENetPeer& p)
+    {
+        if (target == nullptr && peer_of(p).netid == netid) target = &p;
+    });
+    return target;
+}
+
+ENetPeer* peer_by_uid(const std::string& world, int uid)
+{
+    ENetPeer* target = nullptr;
+    peers(world, peer_condition::PEER_SAME_WORLD, [&](ENetPeer& p)
+    {
+        if (target == nullptr && peer_of(p).user_id == uid) target = &p;
+    });
+    return target;
+}
+
+short inventory_count(const ::peer& p, short id)
+{
+    auto it = std::ranges::find(p.slots, id, &::slot::id);
+    return (it != p.slots.end()) ? it->count : 0;
+}
+
+bool inventory_has(const ::peer& p, short id, short count)
+{
+    return inventory_count(p, id) >= count;
+}
+
 void safe_disconnect_peers(int code)
 {
     puts("killing gurotopia...");
