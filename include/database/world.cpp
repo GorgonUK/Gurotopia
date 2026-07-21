@@ -957,6 +957,30 @@ void add_drop(ENetEvent &event, ::slot im, ::pos pos, ::world &world) // @todo
     }, world);
 }
 
+u_short give_to_backpack(ENetEvent& event, short id, u_short amount)
+{
+    while (amount > 0)
+    {
+        const short give = static_cast<short>(std::min<u_short>(amount, 200));
+        const u_short excess = modify_item_inventory(event, ::slot(id, give));
+        const short actually = static_cast<short>(give - excess);
+        if (actually <= 0) break; // backpack refused everything (full)
+        amount = static_cast<u_short>(amount - actually);
+        if (excess > 0) break;    // partial fit -> backpack now full
+    }
+    return amount;
+}
+
+void spill_drops(ENetEvent& event, short id, int count, ::pos at, ::world& world)
+{
+    while (count > 0)
+    {
+        const short give = static_cast<short>(std::min(count, 200));
+        add_drop(event, ::slot(id, give), at, world);
+        count -= give;
+    }
+}
+
 void send_tile_update(ENetEvent &event, ::state state, ::block &block, ::world &world) 
 {
     world.mark_dirty();

@@ -97,15 +97,7 @@ void magplant_edit(ENetEvent &event, const ::hPipe &hPipe)
         // changing filter dumps old stock into backpack when possible
         if (mag.id != 0 && mag.id != static_cast<u_short>(id) && mag.count > 0)
         {
-            while (mag.count > 0)
-            {
-                short give = std::min(mag.count, static_cast<u_short>(200));
-                u_short excess = modify_item_inventory(event, ::slot(static_cast<short>(mag.id), give));
-                short actually = static_cast<short>(give - excess);
-                if (actually <= 0) break;
-                mag.count = static_cast<u_short>(mag.count - actually);
-                if (excess > 0) break;
-            }
+            mag.count = give_to_backpack(event, static_cast<short>(mag.id), mag.count);
             if (mag.count > 0) return; // backpack full — keep old filter
         }
 
@@ -124,15 +116,7 @@ void magplant_edit(ENetEvent &event, const ::hPipe &hPipe)
 
     if (clicked == "retrieve" && mag.id != 0 && mag.count > 0)
     {
-        while (mag.count > 0)
-        {
-            short give = std::min(mag.count, static_cast<u_short>(200));
-            u_short excess = modify_item_inventory(event, ::slot(static_cast<short>(mag.id), give));
-            short actually = static_cast<short>(give - excess);
-            if (actually <= 0) break;
-            mag.count = static_cast<u_short>(mag.count - actually);
-            if (excess > 0) break;
-        }
+        mag.count = give_to_backpack(event, static_cast<short>(mag.id), mag.count);
         refresh();
         return;
     }
@@ -141,15 +125,7 @@ void magplant_edit(ENetEvent &event, const ::hPipe &hPipe)
     {
         if (mag.count > 0)
         {
-            while (mag.count > 0)
-            {
-                short give = std::min(mag.count, static_cast<u_short>(200));
-                u_short excess = modify_item_inventory(event, ::slot(static_cast<short>(mag.id), give));
-                short actually = static_cast<short>(give - excess);
-                if (actually <= 0) break;
-                mag.count = static_cast<u_short>(mag.count - actually);
-                if (excess > 0) break;
-            }
+            mag.count = give_to_backpack(event, static_cast<short>(mag.id), mag.count);
             if (mag.count > 0) { refresh(); return; }
         }
         mag.id = 0;

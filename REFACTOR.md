@@ -15,9 +15,11 @@ Legend: ✅ done · 🔜 planned · ⚠️ needs in-client (GTProxy) verificatio
   central dispatch (`receive.cpp`, `__states.cpp`) and the documented send sites
 - ✅ pool registration: drop redundant `std::bind` identity wrappers (all 5 pools)
 - 🔜 `tools/byte_stream.hpp` — promote `ByteWriter`/`ByteReader` out of `world.cpp`'s anon namespace
-- 🔜 access helpers: `peer_of(event)`, `current_world(...)`, `peer_by_netid/uid`, `inventory_count/has`
-- 🔜 world grid constants `WORLD_WIDTH/HEIGHT` + `in_bounds()`
-- 🔜 `spill_drops()` — collapse the 200-count "drain stack into drops" loop (9+ copies)
+- ✅ access helpers: `peer_of(event)`, `current_world(...)`, `peer_by_netid/uid`, `inventory_count/has`
+  (added + `world.cpp` migrated; handler call sites migrate opportunistically)
+- ✅ world grid constants `WORLD_WIDTH/HEIGHT` + `in_bounds()` (migrated in `world.cpp`)
+- ✅ ⚠️ `spill_drops()` + `give_to_backpack()` — collapsed the 200-count drain loops
+  (7 copies across `magplant`/`vending`/`tile_change`); touches inventory → verify in-client
 - 🔜 consolidate the 3 config loaders + 3 base64 implementations
 
 ## Tier 2 — mechanical file splits (CI-verifiable moves)

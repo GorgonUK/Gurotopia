@@ -231,15 +231,7 @@ void vending_edit(ENetEvent &event, const ::hPipe &hPipe)
 
     if (owner && clicked == "pullstocks" && vend.count > 0)
     {
-        while (vend.count > 0)
-        {
-            short give = std::min(vend.count, static_cast<u_short>(200));
-            u_short excess = modify_item_inventory(event, ::slot(static_cast<short>(vend.id), give));
-            short actually = static_cast<short>(give - excess);
-            if (actually <= 0) break;
-            vend.count = static_cast<u_short>(vend.count - actually);
-            if (excess > 0) break;
-        }
+        vend.count = give_to_backpack(event, static_cast<short>(vend.id), vend.count);
         if (vend.count == 0)
         {
             vend.id = 0;
@@ -297,17 +289,8 @@ void vending_edit(ENetEvent &event, const ::hPipe &hPipe)
         if (inventory_count(pPeer, 242) < wl_cost) return;
 
         modify_item_inventory(event, ::slot(242, static_cast<short>(-wl_cost)));
-        int remaining = items_out;
-        while (remaining > 0)
-        {
-            short give = static_cast<short>(std::min(remaining, 200));
-            u_short excess = modify_item_inventory(event, ::slot(static_cast<short>(vend.id), give));
-            short actually = static_cast<short>(give - excess);
-            if (actually <= 0) break;
-            remaining -= actually;
-            vend.count = static_cast<u_short>(vend.count - actually);
-            if (excess > 0) break;
-        }
+        int remaining = give_to_backpack(event, static_cast<short>(vend.id), static_cast<u_short>(items_out));
+        vend.count = static_cast<u_short>(vend.count - (items_out - remaining));
         if (remaining > 0)
         {
             int refund_wl = per_lock

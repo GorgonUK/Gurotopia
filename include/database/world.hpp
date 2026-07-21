@@ -258,6 +258,16 @@ extern void tile_apply_damage(ENetEvent &event, state state, block &block, u_int
 */
 extern u_short modify_item_inventory(ENetEvent& event, ::slot slot);
 
+/* give up to `amount` of item `id` into the peer's backpack in <=200-count chunks,
+* stopping when the stack is exhausted or the backpack fills. Returns the amount that
+* did NOT fit (i.e. still owed / to keep at the source). Collapses the copy-pasted
+* "drain a stack into the backpack" loop in vending/magplant. */
+extern u_short give_to_backpack(ENetEvent& event, short id, u_short amount);
+
+/* spill `count` of item `id` onto the ground at `at` as world drops, in <=200 stacks.
+* Collapses the copy-pasted "drain container into ground drops" loop. */
+extern void spill_drops(ENetEvent& event, short id, int count, ::pos at, ::world& world);
+
 extern void item_change_object(ENetEvent& event, ::state state);
 
 extern void merge_object(ENetEvent& event, ::slot slot, const ::pos& pos, ::world &world);
