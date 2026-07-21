@@ -23,7 +23,12 @@ Legend: ✅ done · 🔜 planned · ⚠️ needs in-client (GTProxy) verificatio
 - 🔜 consolidate the 3 config loaders + 3 base64 implementations
 
 ## Tier 2 — mechanical file splits (CI-verifiable moves)
-- 🔜 split `database/world.cpp` (1320 lines) into cohesive units
+- ✅ split `database/world.cpp` (1320 → 495 lines) into cohesive units:
+  - `world_serialize.cpp` — blob (de)serialization + MySQL load/save/autosave
+  - `tile_lock.cpp` — Small/Big/Huge/Builder lock rules
+  - `world_gen.cpp` — terrain generation + `blast::thermonuclear`
+  - `world.cpp` (remainder) — world lifecycle, packet-send helpers, object/drop ops,
+    `send_tile_update`, particles. Pure moves; declarations unchanged in `world.hpp`.
 - 🔜 split `state/tile_change.cpp` (1001 lines) into `handle_punch/wrench/place` + per-type tables
 
 ## Tier 3 — structural (⚠️ build + in-client verification required)
