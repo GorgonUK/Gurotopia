@@ -304,12 +304,7 @@ void tile_change(ENetEvent& event, state state)
                 auto vend = std::ranges::find(world->vendings, state.punch, &::vending::pos);
                 if (vend != world->vendings.end())
                 {
-                    while (vend->count > 0)
-                    {
-                        short give = std::min(vend->count, static_cast<u_short>(200));
-                        add_drop(event, ::slot(static_cast<short>(vend->id), give), state.punch.by_32(), *world);
-                        vend->count = static_cast<u_short>(vend->count - give);
-                    }
+                    spill_drops(event, static_cast<short>(vend->id), vend->count, state.punch.by_32(), *world);
                     if (vend->earned > 0)
                         add_drop(event, ::slot(242, vend->earned), state.punch.by_32(), *world);
                     world->vendings.erase(vend);
@@ -321,12 +316,8 @@ void tile_change(ENetEvent& event, state state)
                 auto mag = std::ranges::find(world->magplants, state.punch, &::magplant::pos);
                 if (mag != world->magplants.end())
                 {
-                    while (mag->count > 0 && mag->id != 0)
-                    {
-                        short give = std::min(mag->count, static_cast<u_short>(200));
-                        add_drop(event, ::slot(static_cast<short>(mag->id), give), state.punch.by_32(), *world);
-                        mag->count = static_cast<u_short>(mag->count - give);
-                    }
+                    if (mag->id != 0)
+                        spill_drops(event, static_cast<short>(mag->id), mag->count, state.punch.by_32(), *world);
                     world->magplants.erase(mag);
                 }
             }
@@ -336,13 +327,8 @@ void tile_change(ENetEvent& event, state state)
                 auto comb = std::ranges::find(world->combiners, state.punch, &::combiner::pos);
                 if (comb != world->combiners.end())
                 {
-                    for (::slot s : comb->contents)
-                        while (s.count > 0)
-                        {
-                            short give = std::min<short>(s.count, 200);
-                            add_drop(event, ::slot(s.id, give), state.punch.by_32(), *world);
-                            s.count -= give;
-                        }
+                    for (const ::slot& s : comb->contents)
+                        spill_drops(event, s.id, s.count, state.punch.by_32(), *world);
                     world->combiners.erase(comb);
                 }
             }

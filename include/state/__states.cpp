@@ -10,11 +10,11 @@
 
 std::unordered_map<u_char, std::function<void(ENetEvent&, state)>> state_pool
 {
-    {0x00, std::bind(&movement, std::placeholders::_1, std::placeholders::_2)},
-    {0x03, std::bind(&tile_change, std::placeholders::_1, std::placeholders::_2)},
-    {0x07, std::bind(&tile_activate, std::placeholders::_1, std::placeholders::_2)},
-    {0x0a, std::bind(&item_activate, std::placeholders::_1, std::placeholders::_2)},
-    {0x0b, std::bind(&item_activate_object, std::placeholders::_1, std::placeholders::_2)},
-    {0x15, std::bind(&ping_reply, std::placeholders::_1, std::placeholders::_2)},
-    {0x1a, std::bind(&disconnect, std::placeholders::_1, std::placeholders::_2)}
+    {packet::STATE,                        &movement},
+    {packet::TILE_CHANGE_REQUEST,          &tile_change},
+    {packet::TILE_ACTIVATE_REQUEST,        &tile_activate},
+    {packet::ITEM_ACTIVATE_REQUEST,        &item_activate},
+    {packet::ITEM_ACTIVATE_OBJECT_REQUEST, &item_activate_object},
+    {packet::PING_REPLY,                   &ping_reply},
+    {packet::DISCONNECT,                   &disconnect}
 };

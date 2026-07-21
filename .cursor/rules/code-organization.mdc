@@ -1,0 +1,36 @@
+---
+description: Gurotopia code organization — reuse shared helpers, register handlers in pools
+globs:
+alwaysApply: true
+---
+
+# Code organization (Gurotopia)
+
+Read `ARCHITECTURE.md` for the full module map and reusable-helper index. Before writing code:
+
+## Reuse, don't reinvent
+- Peer from an event: `peer_of(event)` / `peer_of(peer)` — NOT `static_cast<::peer*>(x->data)`.
+- Peer's world: `current_world(peer|event)` — NOT a hand-rolled `std::ranges::find(worlds, ...)`.
+- Find another peer: `peer_by_netid(world, netid)` / `peer_by_uid(world, uid)`.
+- Inventory: `inventory_count` / `inventory_has` (read); `modify_item_inventory`, `give_to_backpack` (write).
+- World drops: `add_object` / `add_drop` / `remove_object` / `despawn_object`, `spill_drops`.
+- Grid: `WORLD_WIDTH` / `WORLD_HEIGHT`, `cord(x,y)`, `in_bounds(...)` — never hardcode 100/60.
+- Protocol bytes: `packet::` constants (`proton/packet.hpp`) — never a bare `0x05 // PACKET_*`.
+- Dialogs: the `create_dialog` fluent builder (`tools/create_dialog.hpp`); if a widget is missing,
+  add a builder method instead of hand-writing `add_*|...\n` strings.
+- Parsing: `hPipe` key/value (`tools/string.hpp`); prefer keys over positional `readch(...)[n]`.
+- Packets: `compress_state` / `get_state` (tank); `ByteWriter`/`ByteReader` (world blob).
+
+## Register every handler in its pool
+Unknown keys are silently ignored, so a handler that isn't registered simply never runs:
+`action_pool` (`action/__action.cpp`), `dialog_return_pool` (`action/dialog_return/__dialog_return.cpp`),
+`state_pool` (`state/__states.cpp`), `cmd_pool` (`commands/__command.cpp`), `event_pool` (`event_type/__event_type.cpp`).
+Use a plain function pointer (or a lambda only when binding a default arg) — not `std::bind`.
+
+## Keep files cohesive
+`database/world*.cpp` is split by concern (runtime ops / serialize / tile_lock / world_gen). Put new
+world code in the matching file. New `.cpp` under `include/**` is picked up by the Makefile automatically.
+
+## Verify
+CI builds GCC+MSYS2 on push. Byte-level changes (tank packets, world blob, map data, dialog strings)
+must also be checked against a real client via GTProxy before merge.

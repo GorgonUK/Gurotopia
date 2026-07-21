@@ -6,7 +6,7 @@
 
 std::unordered_map<ENetEventType, std::function<void(ENetEvent&)>> event_pool
 {
-    {::ENET_EVENT_TYPE_CONNECT, std::bind(&_connect, std::placeholders::_1)},
-    {::ENET_EVENT_TYPE_DISCONNECT, std::bind(&disconnect, std::placeholders::_1)},
-    {::ENET_EVENT_TYPE_RECEIVE, std::bind(&receive, std::placeholders::_1)},
+    {::ENET_EVENT_TYPE_CONNECT, &_connect},
+    {::ENET_EVENT_TYPE_DISCONNECT, &disconnect},
+    {::ENET_EVENT_TYPE_RECEIVE, &receive},
 };

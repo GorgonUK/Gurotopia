@@ -193,6 +193,21 @@ public:
 extern void autosave_peers();
 extern void save_all_peers();
 
+/*
+* @brief the game-layer peer riding on an ENet peer's user data.
+* @note assumes peer.data is set. During a still-pending CONNECT event it can be
+*   null (see peers() in peer.cpp) — only call this from handlers past that point,
+*   which is exactly what the raw static_cast sites already assumed.
+* Migrate `static_cast<::peer*>(e.peer->data)` -> `&peer_of(e)` (keeps `->`).
+*/
+inline ::peer& peer_of(ENetPeer& p)  { return *static_cast<::peer*>(p.data); }
+inline ::peer& peer_of(ENetEvent& e) { return *static_cast<::peer*>(e.peer->data); }
+
+/* count of a given item id across the peer's backpack slots */
+extern short inventory_count(const ::peer& p, short id);
+/* true if the peer holds at least `count` of `id` */
+extern bool  inventory_has(const ::peer& p, short id, short count = 1);
+
 extern ENetHost* host;
 
 enum peer_condition
@@ -202,6 +217,11 @@ enum peer_condition
 };
 
 extern std::vector<ENetPeer*> peers(const std::string &world = "", peer_condition condition = PEER_ALL, std::function<void(ENetPeer&)> fun = [](ENetPeer& peer){});
+
+/* first connected peer in `world` matching this netid / user id, or nullptr.
+* replaces the copy-pasted `peers(world, SAME_WORLD, [&]{ if match target=&p; })` idiom. */
+extern ENetPeer* peer_by_netid(const std::string& world, int netid);
+extern ENetPeer* peer_by_uid(const std::string& world, int uid);
 
 extern void safe_disconnect_peers(int signal);
 
@@ -218,7 +238,7 @@ enum peer_state : int
 
 class state {
 public:
-    int packet_create{ 04 }; // @note NET_MESSAGE_GAME_PACKET
+    int packet_create{ packet::GAME_PACKET };
 
     int type{};
     int netid{};

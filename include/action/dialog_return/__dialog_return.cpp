@@ -25,40 +25,40 @@
 
 std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)>> dialog_return_pool
 {
-    {"popup", std::bind(&popup, std::placeholders::_1, std::placeholders::_2)},
+    {"popup", &popup},
 
-    {"drop_item", std::bind(&drop_item, std::placeholders::_1, std::placeholders::_2)},
-    {"trash_item", std::bind(&trash_item, std::placeholders::_1, std::placeholders::_2)},
-    {"find_item", std::bind(&find_item, std::placeholders::_1, std::placeholders::_2)},
+    {"drop_item", &drop_item},
+    {"trash_item", &trash_item},
+    {"find_item", &find_item},
 
-    {"gateway_edit", std::bind(&gateway_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"door_edit", std::bind(&gateway_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"sign_edit", std::bind(&gateway_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"gateway_edit", &gateway_edit},
+    {"door_edit", &gateway_edit},
+    {"sign_edit", &gateway_edit},
 
-    {"billboard_edit", std::bind(&billboard_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"lock_edit", std::bind(&lock_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"tile_lock_edit", std::bind(&tile_lock_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"billboard_edit", &billboard_edit},
+    {"lock_edit", &lock_edit},
+    {"tile_lock_edit", &tile_lock_edit},
 
-    {"create_blast", std::bind(&create_blast, std::placeholders::_1, std::placeholders::_2)},
-    {"socialportal", std::bind(&socialportal, std::placeholders::_1, std::placeholders::_2)},
-    {"megaphone", std::bind(&megaphone, std::placeholders::_1, std::placeholders::_2)},
+    {"create_blast", &create_blast},
+    {"socialportal", &socialportal},
+    {"megaphone", &megaphone},
 
-    {"mailbox_edit", std::bind(&letter_box, std::placeholders::_1, std::placeholders::_2)},
-    {"bulletin_edit", std::bind(&letter_box, std::placeholders::_1, std::placeholders::_2)},
-    {"donation_edit", std::bind(&letter_box, std::placeholders::_1, std::placeholders::_2)},
+    {"mailbox_edit", &letter_box},
+    {"bulletin_edit", &letter_box},
+    {"donation_edit", &letter_box},
 
-    {"quest_menu", std::bind(&quest_menu, std::placeholders::_1, std::placeholders::_2)},
-    {"goalslist", std::bind(&quest_menu, std::placeholders::_1, std::placeholders::_2)},
-    {"surgery", std::bind(&surgery, std::placeholders::_1, std::placeholders::_2)},
+    {"quest_menu", &quest_menu},
+    {"goalslist", &quest_menu},
+    {"surgery", &surgery},
 
-    {"display_edit", std::bind(&display_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"vending", std::bind(&vending_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"magplant_edit", std::bind(&magplant_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"display_edit", &display_edit},
+    {"vending", &vending_edit},
+    {"magplant_edit", &magplant_edit},
 
-    {"trade_edit", std::bind(&trade_edit, std::placeholders::_1, std::placeholders::_2)},
-    {"combiner_edit", std::bind(&combiner_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"trade_edit", &trade_edit},
+    {"combiner_edit", &combiner_edit},
 
-    {"set_online_status", std::bind(&set_online_status, std::placeholders::_1, std::placeholders::_2)},
-    {"paginated_personal_notebook_view", std::bind(&paginated_personal_notebook_view, std::placeholders::_1, std::placeholders::_2)},
-    {"paginated_personal_notebook_edit", std::bind(&paginated_personal_notebook_edit, std::placeholders::_1, std::placeholders::_2)},
+    {"set_online_status", &set_online_status},
+    {"paginated_personal_notebook_view", &paginated_personal_notebook_view},
+    {"paginated_personal_notebook_edit", &paginated_personal_notebook_edit},
 };

@@ -16,7 +16,8 @@
     #include <openssl/crypto.h>
 
     #include "proton/Variant.hpp"
-    
+    #include "proton/packet.hpp"
+
     #include "database/items.hpp"
     #include "database/peer.hpp"
     #include "database/world.hpp"

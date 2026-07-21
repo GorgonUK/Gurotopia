@@ -57,8 +57,17 @@ struct block
 
     u_char hits[2] = {0, 0}; // @note fg, bg
 };
+/* every world is a fixed 100 x 60 tile grid (6000 blocks, stored 1-D). */
+inline constexpr int WORLD_WIDTH  = 100;
+inline constexpr int WORLD_HEIGHT = 60;
+inline constexpr std::size_t WORLD_BLOCK_COUNT = static_cast<std::size_t>(WORLD_WIDTH) * WORLD_HEIGHT;
+
 // Parentheses are required: cord(x, y + 1) must mean ((y+1)*100+x), not (y+1*100+x).
-#define cord(x, y) (((y) * 100) + (x))
+#define cord(x, y) (((y) * WORLD_WIDTH) + (x))
+
+/* true if a tile coordinate falls inside the world grid. */
+inline bool in_bounds(int x, int y) { return x >= 0 && y >= 0 && x < WORLD_WIDTH && y < WORLD_HEIGHT; }
+inline bool in_bounds(const ::pos& p) { return in_bounds(p.x_int(), p.y_int()); }
 
 struct door 
 {
@@ -199,6 +208,11 @@ extern std::deque<world> worlds;
 extern std::atomic<u_int> g_object_uid; // @note server-wide drop uid high-water (never resets per world)
 extern void note_object_uid(u_int uid);
 
+/* the world a peer is currently in (recent_worlds.back()), or nullptr if not found.
+* replaces the ~21 copies of std::ranges::find(worlds, pPeer->recent_worlds.back(), &world::name). */
+extern ::world* current_world(const ::peer& p);
+extern ::world* current_world(ENetEvent& event);
+
 /* how many tiles a tile lock claims (Small=10, Big=48, Huge/Builder=200) */
 extern int tile_lock_capacity(u_short lock_id);
 
@@ -243,6 +257,16 @@ extern void tile_apply_damage(ENetEvent &event, state state, block &block, u_int
 * @return the remaining amount if exeeds 200. e.g. emplace(slot{0, 201}) returns 1.
 */
 extern u_short modify_item_inventory(ENetEvent& event, ::slot slot);
+
+/* give up to `amount` of item `id` into the peer's backpack in <=200-count chunks,
+* stopping when the stack is exhausted or the backpack fills. Returns the amount that
+* did NOT fit (i.e. still owed / to keep at the source). Collapses the copy-pasted
+* "drain a stack into the backpack" loop in vending/magplant. */
+extern u_short give_to_backpack(ENetEvent& event, short id, u_short amount);
+
+/* spill `count` of item `id` onto the ground at `at` as world drops, in <=200 stacks.
+* Collapses the copy-pasted "drain container into ground drops" loop. */
+extern void spill_drops(ENetEvent& event, short id, int count, ::pos at, ::world& world);
 
 extern void item_change_object(ENetEvent& event, ::state state);
 
