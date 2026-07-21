@@ -25,6 +25,8 @@
 #include "trade_scan.hpp"
 #include "battlepass.hpp"
 #include "collection_quests.hpp"
+#include "piggy_bank.hpp"
+#include "world_category.hpp"
 
 #include "__dialog_return.hpp"
 
@@ -82,4 +84,7 @@ std::unordered_map<std::string, std::function<void(ENetEvent &, const ::hPipe &)
     {"battlepass_leaderboard", &battlepass},
 
     {"collectionQuests", &collection_quests},
+
+    {"piggy_bank", &piggy_bank},
+    {"world_category", &world_category_select},
 };

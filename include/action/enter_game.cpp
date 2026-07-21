@@ -3,6 +3,7 @@
 #include "on/RequestGazette.hpp"
 #include "on/ConsoleMessage.hpp"
 #include "on/SetBux.hpp"
+#include "on/FtueButtonDataSet.hpp"
 #include "tools/create_dialog.hpp"
 #include "automate/holiday.hpp"
 
@@ -12,7 +13,10 @@ void action::enter_game(ENetEvent& event, const std::string& header)
 {
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
-    if (!pPeer->inventory_initialized) // @note brand-new account: grant starter kit once
+    // Capture before starter-kit grant — FTUE is only for the first authenticated entry.
+    const bool first_login = !pPeer->inventory_initialized;
+
+    if (first_login) // @note brand-new account: grant starter kit once
     {
         pPeer->emplace({18, 1}); // @note Fist
         pPeer->emplace({32, 1}); // @note Wrench
@@ -46,6 +50,9 @@ void action::enter_game(ENetEvent& event, const std::string& header)
 
     on::RequestWorldSelectMenu(event);
     on::RequestGazette(event);
+
+    if (first_login)
+        on::FtueButtonDataSet(event);
 
     send_data(*event.peer, compress_state(::state{
         .type = 0x16 // @noote PACKET_PING_REQUEST

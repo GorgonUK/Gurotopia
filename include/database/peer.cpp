@@ -19,10 +19,55 @@ bool peer::exists(const std::string& growid)
     ::hStmt hStmt{ "SELECT 1 FROM peer WHERE growid = ? LIMIT 1" };
 
     MYSQL_BIND param = make_bind_in(growid);
-    mysql_stmt_bind_param(hStmt.pStmt, &param);
-    mysql_stmt_execute(hStmt.pStmt);
+    if (mysql_stmt_bind_param(hStmt.pStmt, &param))
+    {
+        fprintf(stderr, "[peer exists] bind: %s\n", mysql_stmt_error(hStmt.pStmt));
+        return false;
+    }
+    if (mysql_stmt_execute(hStmt.pStmt))
+    {
+        fprintf(stderr, "[peer exists] exec: %s\n", mysql_stmt_error(hStmt.pStmt));
+        return false;
+    }
 
-    return (!mysql_stmt_store_result(hStmt.pStmt) && mysql_stmt_num_rows(hStmt.pStmt) > 0);
+    // Bind a dummy result so store_result/num_rows are reliable across MariaDB versions.
+    int one = 0;
+    MYSQL_BIND result = make_bind_out(one);
+    if (mysql_stmt_bind_result(hStmt.pStmt, &result))
+    {
+        fprintf(stderr, "[peer exists] bind result: %s\n", mysql_stmt_error(hStmt.pStmt));
+        return false;
+    }
+    if (mysql_stmt_store_result(hStmt.pStmt))
+    {
+        fprintf(stderr, "[peer exists] store: %s\n", mysql_stmt_error(hStmt.pStmt));
+        return false;
+    }
+    return mysql_stmt_num_rows(hStmt.pStmt) > 0;
+}
+
+bool peer::mysql_insert_account(const std::string &growid, const std::string &password_hash)
+{
+    ::hStmt hStmt{ "INSERT INTO peer (growid, password) VALUES (?, ?)" };
+
+    MYSQL_BIND params[2] = {
+        make_bind_in(growid),
+        make_bind_in(password_hash)
+    };
+    if (mysql_stmt_bind_param(hStmt.pStmt, params))
+    {
+        fprintf(stderr, "[peer insert] bind: %s\n", mysql_stmt_error(hStmt.pStmt));
+        return false;
+    }
+    if (mysql_stmt_execute(hStmt.pStmt))
+    {
+        const unsigned err = mysql_stmt_errno(hStmt.pStmt);
+        // 1062 = duplicate key — caller may treat as "already registered"
+        if (err != 1062)
+            fprintf(stderr, "[peer insert] exec: %s\n", mysql_stmt_error(hStmt.pStmt));
+        return false;
+    }
+    return true;
 }
 
 template<typename T>
@@ -99,7 +144,7 @@ bool peer::mysql_load_progress()
     ::hStmt hStmt{
         "SELECT gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
         "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest, "
-        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds "
+        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds, piggy_level, home_world "
         "FROM peer_state WHERE uid = ? LIMIT 1"
     };
 
@@ -112,12 +157,14 @@ bool peer::mysql_load_progress()
 
     signed gems = 0;
     signed piggy_gems = 0;
+    signed piggy_level = 0;
     long long playtime_seconds = 0;
     unsigned level = 1, xp = 0, slot_size = 16;
     unsigned role = 0, skin_color = 2527912447u, hair_color = 4278255615u;
     unsigned fires_removed = 0, gbc_pity = 0, initialized = 0;
     unsigned online_status = 0;
     std::string country;
+    std::string home_world;
     std::vector<u_char> clothing_blob(40, 0);
     std::vector<u_char> fav_blob;
     std::vector<u_char> recent_blob, my_blob;
@@ -125,12 +172,12 @@ bool peer::mysql_load_progress()
     std::vector<u_char> quest_blob(16, 0);
     std::vector<u_char> notebook_blob;
     std::vector<u_char> wardrobe_blob(20, 0);
-    unsigned long clothing_len = 0, fav_len = 0, country_len = 0, recent_len = 0, my_len = 0, ach_len = 0, quest_len = 0, notebook_len = 0, wardrobe_len = 0;
+    unsigned long clothing_len = 0, fav_len = 0, country_len = 0, recent_len = 0, my_len = 0, ach_len = 0, quest_len = 0, notebook_len = 0, wardrobe_len = 0, home_world_len = 0;
 
     fav_blob.resize(512);
     notebook_blob.resize(2048);
 
-    MYSQL_BIND results[22]{};
+    MYSQL_BIND results[24]{};
     results[0]  = make_bind_out(gems);
     results[1]  = make_bind_out(level);
     results[2]  = make_bind_out(xp);
@@ -154,6 +201,9 @@ bool peer::mysql_load_progress()
     results[19] = make_bind_out(piggy_gems);
     results[20] = make_bind_out_blob(wardrobe_blob, wardrobe_len);
     results[21] = make_bind_out(playtime_seconds);
+    results[22] = make_bind_out(piggy_level);
+    results[23] = make_bind_out(home_world);
+    results[23].length = &home_world_len;
 
     if (mysql_stmt_bind_result(hStmt.pStmt, results))
     {
@@ -183,6 +233,7 @@ bool peer::mysql_load_progress()
     }
 
     country.resize(country_len);
+    home_world.resize(home_world_len);
     trim_blob(clothing_blob, clothing_len);
     trim_blob(fav_blob, fav_len);
     trim_blob(recent_blob, recent_len);
@@ -193,7 +244,8 @@ bool peer::mysql_load_progress()
     trim_blob(wardrobe_blob, wardrobe_len);
 
     this->gems = gems;
-    this->piggy_gems = std::clamp(piggy_gems, 0, PIGGY_CAP);
+    this->piggy_level = std::clamp(piggy_level, 0, 1000); // keeps piggy_cap() well inside int range
+    this->piggy_gems = std::clamp(piggy_gems, 0, this->piggy_cap());
     this->playtime_seconds = std::max(0ll, playtime_seconds);
     this->level = { static_cast<u_short>(level), static_cast<u_short>(xp) };
     this->slot_size = static_cast<short>(slot_size);
@@ -201,6 +253,7 @@ bool peer::mysql_load_progress()
     this->skin_color = skin_color;
     this->hair_color = hair_color;
     this->country = country;
+    this->home_world = home_world;
     this->fires_removed = static_cast<u_short>(fires_removed);
     this->gbc_pity = static_cast<u_short>(gbc_pity);
     this->inventory_initialized = (initialized != 0);
@@ -362,6 +415,7 @@ bool peer::mysql_save_progress()
 
     signed gems = this->gems;
     signed piggy_gems = this->piggy_gems;
+    signed piggy_level = this->piggy_level;
     unsigned level = this->level.front();
     unsigned xp = this->level.back();
     signed slot_size = this->slot_size;
@@ -377,8 +431,8 @@ bool peer::mysql_save_progress()
         "INSERT INTO peer_state "
         "(uid, gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
         "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest, "
-        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds, piggy_level, home_world) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON DUPLICATE KEY UPDATE "
         // @note role deliberately NOT updated: the DB is authoritative for it, so a
         // manual `UPDATE peer_state SET role=1` can't be clobbered by a session save.
@@ -389,10 +443,11 @@ bool peer::mysql_save_progress()
         "recent_worlds=VALUES(recent_worlds), my_worlds=VALUES(my_worlds), achievements=VALUES(achievements), "
         "quest=VALUES(quest), online_status=VALUES(online_status), notebook=VALUES(notebook), "
         "piggy_gems=VALUES(piggy_gems), wardrobe_preset=VALUES(wardrobe_preset), "
-        "playtime_seconds=VALUES(playtime_seconds)"
+        "playtime_seconds=VALUES(playtime_seconds), piggy_level=VALUES(piggy_level), "
+        "home_world=VALUES(home_world)"
     };
 
-    MYSQL_BIND params[23] = {
+    MYSQL_BIND params[25] = {
         make_bind_in(this->user_id),
         make_bind_in(gems),
         make_bind_in(level),
@@ -415,7 +470,9 @@ bool peer::mysql_save_progress()
         make_bind_in_blob(notebook_blob),
         make_bind_in(piggy_gems),
         make_bind_in_blob(wardrobe_blob),
-        make_bind_in(this->playtime_seconds)
+        make_bind_in(this->playtime_seconds),
+        make_bind_in(piggy_level),
+        make_bind_in(this->home_world)
     };
 
     if (mysql_stmt_bind_param(upsert.pStmt, params) || mysql_stmt_execute(upsert.pStmt))
@@ -541,7 +598,7 @@ void peer::credit_gems(ENetEvent &event, int amount)
     if (amount <= 0) return;
 
     this->gems = std::clamp(this->gems + amount, 0, std::numeric_limits<signed>::max());
-    this->piggy_gems = std::min(this->piggy_gems + amount, PIGGY_CAP);
+    this->piggy_gems = std::min(this->piggy_gems + amount, this->piggy_cap());
     this->mark_dirty();
     on::SetBux(event);
 }

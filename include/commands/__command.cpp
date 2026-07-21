@@ -14,6 +14,7 @@
 #include "ageworld.hpp"
 #include "quest.hpp"
 #include "give.hpp"
+#include "sethome.hpp"
 #include "__command.hpp"
 
 /* emote commands all dispatch to on::Action. listed once here so the
@@ -28,7 +29,7 @@ static constexpr std::string_view emotes[24]{
 /* named commands with their usage hint, shown in /help */
 static constexpr std::string_view named_help =
     "/time /sb {msg} /find /warp {world} /punch {id} /skin {id} /who /me {msg} "
-    "/news /weather {id} /ghost /ageworld /quest "
+    "/news /weather {id} /ghost /ageworld /quest /sethome "
     "/give {id} [count] /setgems {amount}";
 
 std::array<std::string_view, 8> cmd_requires_arg{
@@ -66,6 +67,7 @@ std::unordered_map<std::string_view, std::function<void(ENetEvent&, const std::s
         {"quest", &quest},
         {"give", &give},
         {"setgems", &setgems},
+        {"sethome", &sethome},
     };
 
     for (std::string_view emote : emotes)

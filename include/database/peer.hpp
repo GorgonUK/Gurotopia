@@ -86,6 +86,9 @@ class peer {
 public:
     bool exists(const std::string& growid);
 
+    /* Insert growid+password. Returns false if the row already exists (duplicate key). */
+    bool mysql_insert_account(const std::string &growid, const std::string &password_hash);
+
     template<typename T>
     void mysql_insert(const std::string& column, const T& value);
 
@@ -134,8 +137,13 @@ public:
     std::vector<short> fav{};
 
     signed gems{0};
-    signed piggy_gems{0}; // @note banked gems (Life Goals / quests / gem pickup); cap 1_500_000
+    signed piggy_gems{0}; // @note banked gems (Life Goals / quests / gem pickup); capped at piggy_cap()
+    signed piggy_level{0}; // @note completed piggy collections; each one raises the bank target
     static constexpr int PIGGY_CAP = 1'500'000;
+    /*
+    * @brief current bank target: 1.5M, then 3M, 4.5M, ... (+1.5M per collection).
+    */
+    int piggy_cap() const { return PIGGY_CAP * (this->piggy_level + 1); }
 
     /*
     * @brief credit wallet gems and bank the same amount into the Piggy Bank (capped).
@@ -155,6 +163,7 @@ public:
 
     std::array<std::string, 6ull> recent_worlds{}; // @note recent worlds, a list of 6 worlds, once it reaches 7 it'll be replaced by the oldest
     std::array<std::string, 200ull> my_worlds{}; // @note first 200 relevant worlds locked by peer.
+    std::string home_world{}; // @note world opened by the Home button / gohomeworld; empty → START
     
     std::deque<std::chrono::steady_clock::time_point> messages; // @note last 5 que messages sent time, this is used to check for spamming
 

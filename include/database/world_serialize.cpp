@@ -429,26 +429,33 @@ bool world_save(const ::world &world)
         unsigned is_public = world.is_public ? 1u : 0u;
         unsigned lock_state = world.lock_state;
         unsigned min_level = world.minimum_entry_level;
+        unsigned category = world.category;
+        long long total_visits = world.total_visits;
         float weather_x = world.weather.x;
         float weather_y = world.weather.y;
         unsigned last_uid = world.last_object_uid;
 
         ::hStmt stmt{
             "INSERT INTO world "
-            "(name, owner, is_public, lock_state, minimum_entry_level, weather_x, weather_y, last_object_uid, data) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "(name, owner, is_public, lock_state, minimum_entry_level, category, total_visits, "
+            "weather_x, weather_y, last_object_uid, data) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON DUPLICATE KEY UPDATE "
             "owner=VALUES(owner), is_public=VALUES(is_public), lock_state=VALUES(lock_state), "
             "minimum_entry_level=VALUES(minimum_entry_level), weather_x=VALUES(weather_x), "
+            "category=VALUES(category), "
             "weather_y=VALUES(weather_y), last_object_uid=VALUES(last_object_uid), data=VALUES(data)"
+            // total_visits is owned by record_world_visit()'s atomic UPDATE — do not clobber it.
         };
 
-        MYSQL_BIND params[9] = {
+        MYSQL_BIND params[11] = {
             make_bind_in(world.name),
             make_bind_in(owner),
             make_bind_in(is_public),
             make_bind_in(lock_state),
             make_bind_in(min_level),
+            make_bind_in(category),
+            make_bind_in(total_visits),
             make_bind_in(weather_x),
             make_bind_in(weather_y),
             make_bind_in(last_uid),
@@ -472,7 +479,7 @@ bool world_save(const ::world &world)
 bool world_load(::world &world, const std::string &name)
 {
     ::hStmt stmt{
-        "SELECT owner, is_public, lock_state, minimum_entry_level, weather_x, weather_y, "
+        "SELECT owner, is_public, lock_state, minimum_entry_level, category, total_visits, weather_x, weather_y, "
         "last_object_uid, data FROM world WHERE name = ? LIMIT 1"
     };
 
@@ -484,17 +491,20 @@ bool world_load(::world &world, const std::string &name)
     }
 
     signed owner = 0;
-    unsigned is_public = 0, lock_state = 0, min_level = 1, last_uid = 0;
+    unsigned is_public = 0, lock_state = 0, min_level = 1, category = 0, last_uid = 0;
+    long long total_visits = 0;
     float weather_x = 0, weather_y = 0;
     std::vector<u_char> blob;
     unsigned long blob_len = 0;
     blob.resize(2u << 20); // 2 MiB
 
-    MYSQL_BIND results[8] = {
+    MYSQL_BIND results[10] = {
         make_bind_out(owner),
         make_bind_out(is_public),
         make_bind_out(lock_state),
         make_bind_out(min_level),
+        make_bind_out(category),
+        make_bind_out(total_visits),
         make_bind_out(weather_x),
         make_bind_out(weather_y),
         make_bind_out(last_uid),
@@ -537,6 +547,8 @@ bool world_load(::world &world, const std::string &name)
         world.is_public = (is_public != 0);
         world.lock_state = static_cast<u_char>(lock_state);
         world.minimum_entry_level = static_cast<u_char>(min_level);
+        world.category = static_cast<u_char>(std::min(category, 15u));
+        world.total_visits = std::max(0ll, total_visits);
         world.weather = ::pos{weather_x, weather_y};
         world.last_object_uid = last_uid;
         for (const ::object &o : world.objects)
@@ -567,6 +579,32 @@ void autosave_worlds()
         if (world_save(w))
             w.dirty = false;
     }
+}
+
+void record_world_visit(::world &world)
+{
+    if (world.name.empty())
+        return;
+
+    auto bump = [&]() -> bool {
+        ::hStmt stmt{"UPDATE world SET total_visits = total_visits + 1 WHERE name = ?"};
+        MYSQL_BIND param = make_bind_in(world.name);
+        if (mysql_stmt_bind_param(stmt.pStmt, &param) || mysql_stmt_execute(stmt.pStmt))
+        {
+            fprintf(stderr, "[world visit] %s: %s\n", world.name.c_str(), mysql_stmt_error(stmt.pStmt));
+            return false;
+        }
+        return mysql_stmt_affected_rows(stmt.pStmt) > 0;
+    };
+
+    if (!bump())
+    {
+        // New worlds may not have a DB row until the first save.
+        if (!world_save(world) || !bump())
+            return;
+    }
+
+    ++world.total_visits;
 }
 
 void save_all_worlds()

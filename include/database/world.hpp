@@ -169,6 +169,24 @@ struct letter
     ::slot im{0, 0}; // @note donation boxes only: the donated item
 };
 
+struct world_category
+{
+    u_char id;
+    std::string_view name;
+};
+
+inline constexpr std::array<world_category, 15> WORLD_CATEGORIES{{
+    {1, "Adventure"}, {2, "Art"}, {3, "Farm"}, {4, "Game"}, {5, "Information"},
+    {6, "Parkour"}, {7, "Roleplay"}, {8, "Shop"}, {9, "Social"}, {11, "Story"},
+    {12, "Trade"}, {13, "Guild"}, {14, "Puzzle"}, {15, "Music"}, {0, "None"}
+}};
+
+inline std::string_view world_category_name(u_char id)
+{
+    const auto found = std::ranges::find(WORLD_CATEGORIES, id, &world_category::id);
+    return found == WORLD_CATEGORIES.end() ? "None" : found->name;
+}
+
 class world 
 {
 public:
@@ -181,6 +199,8 @@ public:
     bool is_public{}; // @note checks if world is public to break/place
     u_char lock_state{0x00}; // @note uses lock_state::
     u_char minimum_entry_level{1}; // @note minimal level required to enter a world
+    u_char category{}; // @note world-select category (0=None, 1..15 official categories)
+    long long total_visits{}; // @note cumulative successful world entries
 
     u_char visitors{}; // @note the current number of peers in a world, excluding invisable peers
     u_char netid_counter{}; // @note a number that only increases, this value resets during ~world()
@@ -241,6 +261,8 @@ extern bool world_has_xenonite(const ::world &world);
 
 extern bool world_save(const ::world &world);
 extern bool world_load(::world &world, const std::string &name);
+/* atomically bump DB total_visits and keep the in-memory counter in sync */
+extern void record_world_visit(::world &world);
 extern void autosave_worlds();
 extern void save_all_worlds();
 

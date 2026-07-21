@@ -11,3 +11,6 @@ extern void ip_login_failed(const ENetAddress &address);
 
 /* successful login clears earlier fails for this address */
 extern void ip_login_succeeded(const ENetAddress &address);
+
+/* drop every fail / block entry (admin / local recovery) */
+extern void ip_login_clear_all();

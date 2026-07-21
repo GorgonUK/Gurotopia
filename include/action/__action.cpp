@@ -24,6 +24,8 @@
 #include "buy.hpp"
 #include "openPiggyBank.hpp"
 #include "wardrobe.hpp"
+#include "world_button.hpp"
+#include "gohomeworld.hpp"
 
 #include "quit.hpp"
 
@@ -55,6 +57,8 @@ std::unordered_map<std::string, std::function<void(ENetEvent&, const std::string
     {"action|storenavigate", &action::storenavigate},
     {"action|buy", [](ENetEvent& e, const std::string& h){ action::buy(e, h, ""); }},
     {"action|openPiggyBank", &action::openPiggyBank},
+    {"action|world_button", &action::world_button},
+    {"action|gohomeworld", &action::gohomeworld},
     {"action|wardrobe_preset_load", &action::wardrobe_preset_load},
     {"action|wardrobe_save_ui", &action::wardrobe_save_ui},
     {"action|wardrobe_unequip_all", &action::wardrobe_unequip_all},

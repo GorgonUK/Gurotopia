@@ -396,6 +396,7 @@ void action::join_request(ENetEvent& event, const std::string& header, const std
             )
         );
         ++world.visitors;
+        record_world_visit(world);
         if (std::ranges::find(buffs, "`9XENONITE") != buffs.end())
             pPeer->state |= S_DOUBLE_JUMP;
         on::SetClothing(*event.peer);

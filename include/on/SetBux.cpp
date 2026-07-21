@@ -35,10 +35,11 @@ namespace
 
 void on::sync_piggy_bank(ENetEvent &event)
 {
-    ::peer *pPeer = static_cast<::peer*>(event.peer->data);
-    pPeer->piggy_gems = std::clamp(pPeer->piggy_gems, 0, ::peer::PIGGY_CAP);
+    ::peer *pPeer = &peer_of(event);
+    const int cap = pPeer->piggy_cap();
+    pPeer->piggy_gems = std::clamp(pPeer->piggy_gems, 0, cap);
 
-    const std::string text = std::format("{}/1.5M", piggy_hud_amount(pPeer->piggy_gems));
+    const std::string text = std::format("{}/{}", piggy_hud_amount(pPeer->piggy_gems), piggy_hud_amount(cap));
     send_varlist(event.peer, {
         "OnEventButtonDataSet",
         "PiggyBankButton",
@@ -66,4 +67,9 @@ void on::SetBux(ENetEvent& event)
 std::string on::format_gems_commas(int amount)
 {
     return comma_gems(amount);
+}
+
+std::string on::format_gems_compact(int amount)
+{
+    return piggy_hud_amount(amount);
 }

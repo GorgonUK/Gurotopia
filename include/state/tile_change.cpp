@@ -381,6 +381,8 @@ void tile_change(ENetEvent& event, state state)
                 }
                 
                 world->owner = 0;
+                world->category = 0;
+                world->mark_dirty();
             }
             else if (item.type == type::LOCK && is_tile_lock(item.id))
             {
@@ -680,14 +682,17 @@ void tile_change(ENetEvent& event, state state)
                                 "add_checkbox|checkbox_disable_music|Disable Custom Music Blocks|{}\n"
                                 "add_text_input|tempo|Music BPM|100|3|\n"
                                 "add_checkbox|checkbox_disable_music_render|Make Custom Music Blocks invisible|0\n"
-                                "add_checkbox|checkbox_set_as_home_world|Set as Home World|0|\n"
+                                "add_checkbox|checkbox_set_as_home_world|Set as Home World|{}|\n"
                                 "add_text_input|minimum_entry_level|World Level: |{}|3|\n"
                                 "add_smalltext|Set minimum world entry level.|\n"
                                 "add_button|sessionlength_dialog|`wSet World Timer``|noflags|0|0|\n"
-                                "add_button|changecat|`wCategory: None``|noflags|0|0|\n"
+                                "add_button|changecat|`wCategory: {}``|noflags|0|0|\n"
                                 "add_button|getKey|Get World Key|noflags|0|0|\n"
                                 "end_dialog|lock_edit|Cancel|OK|\n",
-                                item.raw_name, item.id, state.punch.x, state.punch.y, to_char(world->is_public), (world->lock_state & DISABLE_MUSIC) ? "1" : "0", world->minimum_entry_level
+                                item.raw_name, item.id, state.punch.x, state.punch.y, to_char(world->is_public),
+                                (world->lock_state & DISABLE_MUSIC) ? "1" : "0",
+                                (pPeer->home_world == world->name) ? "1" : "0",
+                                world->minimum_entry_level, world_category_name(world->category)
                             )
                         });
                     }

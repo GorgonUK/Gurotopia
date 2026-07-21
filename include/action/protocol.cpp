@@ -51,12 +51,17 @@ void action::protocol(ENetEvent& event, const std::string& header)
             if (!register_account)
                 throw std::runtime_error("GrowID not found. Register first, or check the name.");
 
-            pPeer->mysql_insert("growid", pPeer->growid);
-
             std::string hashed = password_hash(plaintext);
             if (hashed.empty()) throw std::runtime_error("Could not create account.");
 
-            pPeer->mysql_update<std::string>("password", hashed);
+            // Prefer a single insert; if GTLogin already wrote this GrowID into the same DB
+            // between exists() and here (or a prior handoff), fall through to verify.
+            if (!pPeer->mysql_insert_account(pPeer->growid, hashed))
+            {
+                pPeer->mysql_select_all();
+                if (!password_verify(plaintext, pPeer->password))
+                    throw std::runtime_error("That GrowID is already taken.");
+            }
         }
         else
         {

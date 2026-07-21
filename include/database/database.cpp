@@ -84,11 +84,17 @@ void create_table_if_not_exist()
     // migration: piggy bank balance (gems earned toward the 1.5M bank)
     run_query("ALTER TABLE peer_state ADD COLUMN piggy_gems INT NOT NULL DEFAULT 0", /*silent_dup=*/true);
 
+    // migration: piggy bank tier (each collection raises the bank target by 1.5M)
+    run_query("ALTER TABLE peer_state ADD COLUMN piggy_level INT NOT NULL DEFAULT 0", /*silent_dup=*/true);
+
     // migration: wardrobe preset "one" (10 clothing item ids as little-endian shorts)
     run_query("ALTER TABLE peer_state ADD COLUMN wardrobe_preset BLOB NOT NULL", /*silent_dup=*/true);
 
     // migration: cumulative authenticated playtime in seconds
     run_query("ALTER TABLE peer_state ADD COLUMN playtime_seconds BIGINT NOT NULL DEFAULT 0", /*silent_dup=*/true);
+
+    // migration: home world name for action|gohomeworld / /sethome
+    run_query("ALTER TABLE peer_state ADD COLUMN home_world VARCHAR(32) NOT NULL DEFAULT ''", /*silent_dup=*/true);
 
     run_query(R"(
         CREATE TABLE IF NOT EXISTS peer_inventory (
@@ -107,6 +113,8 @@ void create_table_if_not_exist()
             is_public TINYINT NOT NULL DEFAULT 0,
             lock_state TINYINT UNSIGNED NOT NULL DEFAULT 0,
             minimum_entry_level TINYINT UNSIGNED NOT NULL DEFAULT 1,
+            category TINYINT UNSIGNED NOT NULL DEFAULT 0,
+            total_visits BIGINT UNSIGNED NOT NULL DEFAULT 0,
             weather_x FLOAT NOT NULL DEFAULT 0,
             weather_y FLOAT NOT NULL DEFAULT 0,
             last_object_uid INT UNSIGNED NOT NULL DEFAULT 0,
@@ -114,6 +122,8 @@ void create_table_if_not_exist()
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         )
     )");
+    run_query("ALTER TABLE world ADD COLUMN category TINYINT UNSIGNED NOT NULL DEFAULT 0", /*silent_dup=*/true);
+    run_query("ALTER TABLE world ADD COLUMN total_visits BIGINT UNSIGNED NOT NULL DEFAULT 0", /*silent_dup=*/true);
 }
 
 bool mysql_begin()

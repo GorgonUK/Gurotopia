@@ -70,3 +70,8 @@ void ip_login_succeeded(const ENetAddress &address)
 {
     std::erase_if(tracks, [ip = to_ip(address)](const ::track &t) { return t.ip == ip; });
 }
+
+void ip_login_clear_all()
+{
+    tracks.clear();
+}
