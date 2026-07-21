@@ -203,7 +203,18 @@ gem_drop_multiplier|10
 
 ### Server-data configuration
 
-Edit `deploy/server_data.php` and replace the server address:
+Before editing this file, deploy your own copy of
+[GorgonUK/GTLogin](https://github.com/GorgonUK/GTLogin). The example
+`gtlogin-six.vercel.app` deployment belongs to this project and is already
+configured for a different server/database. It will **not** register or
+authenticate users for your VPS.
+
+Follow the GTLogin repository's deployment guide, configure its MariaDB
+environment variables to use your server database, and note the hostname
+Vercel assigns to your deployment.
+
+Then edit `deploy/server_data.php`, replacing both `<VPS_IP>` and
+`<YOUR_GTLOGIN_DOMAIN>`:
 
 ```text
 server|<VPS_IP>
@@ -211,13 +222,18 @@ port|17091
 type|1
 type2|1
 #maint|Server under maintenance. Please try again later.
-loginurl|gtlogin-six.vercel.app
+loginurl|<YOUR_GTLOGIN_DOMAIN>
 meta|gurotopia
 RTENDMARKERBS1001
 ```
 
-Use your own GTLogin deployment for `loginurl` if applicable. Do not include
-`https://` in this value.
+For example, if Vercel gives you `my-gtlogin.vercel.app`, use:
+
+```text
+loginurl|my-gtlogin.vercel.app
+```
+
+Do not include `https://` or a trailing slash in `loginurl`.
 
 ## 5. Set database secrets
 
