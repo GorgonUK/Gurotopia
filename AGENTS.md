@@ -63,3 +63,36 @@ reuse `peer_of`, `current_world`, `peer_by_netid/uid`, `inventory_count/has`, `g
 `spill_drops`, `in_bounds`, the `packet::` protocol constants, and the `create_dialog` builder rather
 than re-deriving them. `database/world*.cpp` is split by concern (runtime ops / serialize / tile_lock /
 world_gen) — put new world code in the matching file. Refactor status lives in `REFACTOR.md`.
+
+## Cursor Cloud specific instructions
+
+Ubuntu 24.04 + GCC 13. Build deps (`build-essential libssl-dev libmariadb-dev pkg-config`) and
+`mariadb-server` are installed by the startup update script; ENet is a vendored static lib in-repo.
+
+- **Build / lint / test:** `make -j$(nproc)` → produces `main.out` at the repo root. This is the only
+  automated check — there is **no unit-test suite and no runnable local linter** (static analysis is
+  hosted Codacy; CI just builds on push). Standard build/run commands live in `README.md`.
+- **Run:** `sudo ./main.out` from the repo root. It **must** run as root (binds TCP 443) and from the
+  repo root (it resolves `items.dat`, `resources/`, and the cfgs relative to `cwd`). Stop with Ctrl+C
+  (graceful — releases 443 + 17091). Ports: TCP 443 (HTTPS `server_data.php` bootstrap, in-process
+  thread) and UDP 17091 (ENet game traffic).
+- **MariaDB:** no systemd here — start it with `sudo mariadbd --user=mysql` (datadir `/var/lib/mysql`
+  is already initialized). Dev DB user is `gurotopia` / `change_me` (ALL privileges). The server
+  auto-creates the `gurotopia` database and all tables on connect, so no manual migrations.
+- **Required runtime files (all gitignored, must exist or the server won't run):** `database.cfg`,
+  `server.cfg`, `server_data.php`, and `items.dat`.
+  - **`items.dat` is proprietary Growtopia data and is NOT in the repo.** `decode_items()` calls
+    `std::filesystem::file_size("items.dat")` with no guard, so a missing file throws and aborts the
+    whole process. A compatible file (parser supports up to version `0x1a`) must be supplied. During
+    setup one was fetched from the public `StileDevs/grow-items` repo (`assets/items.dat`, v0x1a).
+  - **Config gotcha:** cfgs are parsed **positionally by pipe index**, not by key. Do **not** copy the
+    commented `database.cfg.example` / `server.cfg.example` verbatim — a comment line without a `|`
+    shifts every field and breaks parsing. Write bare `key|value` lines only. (`server_data.php` keeps
+    its `#maint|...` line precisely because that line contains a `|` and is counted in the layout.)
+- **Quick "hello world" smoke test** (server running): the client bootstrap request
+  `curl -sk -X POST https://127.0.0.1/growtopia/server_data.php --data protocol=216` returns the
+  pipe-delimited `server_data` payload (HTTP 200) over TLS.
+- **Logs:** stdout is block-buffered through pipes; prefix with `stdbuf -oL -eL` to watch startup lines
+  (`connected to MariaDB…`, `listening on…`, `items.dat parsed successfully!`) live.
+- Full client login/gameplay (ENet 17091) needs the real Growtopia client or GTProxy pointed at this
+  host (hosts-file override) plus an external GTLogin deployment for auth — not reproducible headless.
