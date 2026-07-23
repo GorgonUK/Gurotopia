@@ -720,6 +720,8 @@ void safe_disconnect_peers(int code)
 
 state get_state(const std::vector<u_char> &&packet) 
 {
+    if (packet.size() < 15ull * sizeof(int)) return {}; // @note reads 15 32-bit words below
+
     const int     *i32   = reinterpret_cast<const int*>(packet.data());
     const u_int *u_i32 = reinterpret_cast<const u_int*>(packet.data());
     const float   *f_i32 = reinterpret_cast<const float*>(packet.data());
