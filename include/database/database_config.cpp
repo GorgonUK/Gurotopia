@@ -24,17 +24,21 @@
         } // @note close write
         else
         {
-            std::vector<std::string> pipes;
+            /* @note key-based, comment-tolerant parse (see server_config.cpp). The old
+               positional pipes[1]/[3]/[5] indexing broke on any comment/blank line —
+               including the ones in database.cfg.example — and silently set host="host". */
             for (std::string line; std::getline(file, line); ) 
             {
                 if (!line.empty() && line.back() == '\r') line.pop_back(); // @note Windows CRLF on Linux
-                auto pipe_pair = readch(line, '|');
-                pipes.insert(pipes.end(), pipe_pair.begin(), pipe_pair.end());
-            }
+                if (line.empty() || line.front() == '#') continue;
 
-            db_config.host     = pipes[1];
-            db_config.user     = pipes[3];
-            db_config.password = pipes[5];
+                auto kv = readch(line, '|');
+                if (kv.size() < 2ull) continue;
+
+                if      (kv[0] == "host")     db_config.host     = kv[1];
+                else if (kv[0] == "user")     db_config.user     = kv[1];
+                else if (kv[0] == "password") db_config.password = kv[1];
+            }
         } // @note delete pipes
     } // @note close file
     return db_config;

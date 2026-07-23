@@ -1,5 +1,6 @@
 #include "pch.hpp"
 #include <fstream>
+#include <cstdlib>
 
 #include "server_data.hpp"
 
@@ -28,21 +29,27 @@
         } // @note close write
         else
         {
-            std::vector<std::string> pipes;
+            /* @note key-based, comment-tolerant parse. The old positional pipes[1..13]
+               indexing threw std::out_of_range / std::stoi on any comment or missing line
+               (e.g. the header comments in server_data.php.example) and killed startup.
+               Unset keys keep their defaults from ::server_data. The 'maint' line is a
+               comment (#maint|…) by convention, so maintenance text stays the default. */
             for (std::string line; std::getline(file, line); ) 
             {
                 if (!line.empty() && line.back() == '\r') line.pop_back(); // @note Windows CRLF on Linux
-                auto pipe_pair = readch(line, '|');
-                pipes.insert(pipes.end(), pipe_pair.begin(), pipe_pair.end());
-            }
+                if (line.empty() || line.front() == '#') continue;
 
-            server_data.server = pipes[1];
-            server_data.port = std::stoi(pipes[3]);
-            server_data.type = std::stoi(pipes[5]);
-            server_data.type2 = std::stoi(pipes[7]);
-            server_data.maint = pipes[9];
-            server_data.loginurl = pipes[11];
-            server_data.meta = pipes[13];
+                auto kv = readch(line, '|');
+                if (kv.size() < 2ull) continue;
+
+                if      (kv[0] == "server")   server_data.server   = kv[1];
+                else if (kv[0] == "port")     { int v = std::atoi(kv[1].c_str()); if (v > 0 && v <= 65535) server_data.port = static_cast<u_short>(v); }
+                else if (kv[0] == "type")     server_data.type     = static_cast<u_char>(std::atoi(kv[1].c_str()));
+                else if (kv[0] == "type2")    server_data.type2    = static_cast<u_char>(std::atoi(kv[1].c_str()));
+                else if (kv[0] == "maint")    server_data.maint    = kv[1];
+                else if (kv[0] == "loginurl") server_data.loginurl = kv[1];
+                else if (kv[0] == "meta")     server_data.meta     = kv[1];
+            }
         } // @note delete str, pipes
     } // @note close file
     return server_data;
