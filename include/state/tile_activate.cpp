@@ -10,6 +10,8 @@ void tile_activate(ENetEvent& event, state state)
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;
 
+    if (!in_bounds(state.punch)) return; // @note client-supplied punch coords must be validated before indexing blocks
+
     ::block &block = world->blocks[cord(state.punch.x, state.punch.y)];
     const ::item &item = id_to_item(block.fg);
     switch (item.type)

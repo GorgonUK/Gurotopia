@@ -12,6 +12,8 @@ void gateway_edit(ENetEvent& event, const ::hPipe &hPipe)
     auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
     if (world == worlds.end()) return;
 
+    if (!in_bounds(tilex, tiley)) return; // @note client-supplied dialog coords must be validated before indexing blocks
+
     block &block = world->blocks[cord(tilex, tiley)];
 
     if (hPipe["dialog_name"] == "sign_edit") 
@@ -23,7 +25,7 @@ void gateway_edit(ENetEvent& event, const ::hPipe &hPipe)
     else if (hPipe["dialog_name"] == "gateway_edit") 
     {
         block.state[2] &= ~(S_PUBLIC | S_LOCKED);
-        block.state[2] |= stoi(hPipe["checkbox_public"]) ? S_PUBLIC : S_LOCKED;
+        block.state[2] |= atoi(hPipe["checkbox_public"].c_str()) ? S_PUBLIC : S_LOCKED;
     }
 
     send_tile_update(event, {
