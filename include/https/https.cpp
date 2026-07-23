@@ -53,13 +53,19 @@ void https::listener()
     if (!ctx)
     {
         ERR_print_errors_fp(stderr);
+        std::fprintf(stderr, "[https] SSL_CTX_new failed; server_data.php bootstrap disabled\n");
+        return;
     }
 
     /* https://docs.openssl.org/master/man3/SSL_CTX_use_certificate/#return-values */
     if (SSL_CTX_use_certificate_file(ctx, "resources/ctx/server.crt", SSL_FILETYPE_PEM) != 1 ||
-        SSL_CTX_use_PrivateKey_file(ctx, "resources/ctx/server.key", SSL_FILETYPE_PEM)  != 1)
+        SSL_CTX_use_PrivateKey_file(ctx, "resources/ctx/server.key", SSL_FILETYPE_PEM)  != 1 ||
+        SSL_CTX_check_private_key(ctx) != 1)
     {
         ERR_print_errors_fp(stderr);
+        std::fprintf(stderr, "[https] failed to load TLS cert/key (resources/ctx/server.{crt,key}); bootstrap disabled\n");
+        SSL_CTX_free(ctx);
+        return;
     }
 
     SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
@@ -73,6 +79,8 @@ void https::listener()
     if (socket == INVALID_SOCKET)
     {
         cross_log("socket function failed");
+        SSL_CTX_free(ctx);
+        return;
     }
 
 #ifdef SO_REUSEADDR
@@ -91,6 +99,9 @@ void https::listener()
     if (bind(socket, (struct sockaddr*)&addr, addrlen) == SOCKET_ERROR)
     {
         cross_log("could not bind socket");
+        cross_close(socket);
+        SSL_CTX_free(ctx);
+        return;
     }
 
     const std::string Content =

@@ -42,6 +42,12 @@ int main()
         };
 
         host = enet_host_create (ENET_ADDRESS_TYPE_IPV4, &address, 50ull/* max peer count */, 2ull, 0, 0);
+        if (!host)
+        {
+            std::fprintf(stderr, "failed to create ENet host on port %hu (already in use?)\n", gServer_data.port);
+            enet_deinitialize();
+            return EXIT_FAILURE;
+        }
         std::thread(&https::listener).detach();
     } // @note delete address
     host->usingNewPacketForServer = true;

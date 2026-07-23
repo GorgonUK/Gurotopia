@@ -1,4 +1,5 @@
 #include "pch.hpp"
+#include <cstdlib>
 
 #include "database.hpp"
 #include "database_config.hpp"
@@ -155,14 +156,24 @@ void mysql_rollback()
 void mysql_connect()
 {
     db = mysql_init(NULL);
+    if (!db)
+    {
+        fprintf(stderr, "mysql_init failed (out of memory)\n");
+        std::_Exit(EXIT_FAILURE);
+    }
 
     if (!mysql_real_connect(db, gDb_config.host.c_str(), gDb_config.user.c_str(), (gDb_config.password.empty()) ? NULL : gDb_config.password.c_str(), NULL, 3306u, NULL, 0u)) 
     {
-        fprintf(stderr, "%s\n", mysql_error(db));
+        // @note fail fast: every handler/autosave assumes a live connection, so a dead
+        // handle would otherwise cause silent data loss or a null deref later.
+        fprintf(stderr, "failed to connect to MariaDB (%s@%s): %s\n", gDb_config.user.c_str(), gDb_config.host.c_str(), mysql_error(db));
+        mysql_close(db); // @note free the partially-initialized handle before exiting
+        std::_Exit(EXIT_FAILURE); // @note skip atexit/static-dtor teardown (detached HTTPS thread still running)
     }
-    else printf("connected to MariaDB server on %s:%d\n", db->host, db->port);
+    printf("connected to MariaDB server on %s:%d\n", db->host, db->port);
 
-    mysql_query(db, "CREATE DATABASE IF NOT EXISTS gurotopia");
+    if (mysql_query(db, "CREATE DATABASE IF NOT EXISTS gurotopia"))
+        fprintf(stderr, "[sql] %s\n", mysql_error(db));
     mysql_select_db(db, "gurotopia");
 
     create_table_if_not_exist();
