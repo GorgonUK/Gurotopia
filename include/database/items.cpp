@@ -1,6 +1,8 @@
 #include "pch.hpp"
 #include <filesystem>
 #include <fstream>
+#include <system_error>
+#include <cstdlib>
 
 #include "items.hpp"
 
@@ -8,8 +10,9 @@ std::vector<::item> items;
 
 const ::item &id_to_item(u_short id) noexcept // @note std::out_of_range is handled
 {
-    if (id >= items.size()) return items[0]; // @note we can't return a contructor so this is gonna be our dummy value
-    
+    static const ::item dummy{}; // @note fallback when items is empty or id is out of range
+    if (items.empty() || id >= items.size()) return items.empty() ? dummy : items[0];
+
     return items[id];
 }
 
@@ -21,7 +24,12 @@ void shift_pos(const std::vector<u_char> &data, u_int &pos, T &value) noexcept /
 {
     u_char *i8 = reinterpret_cast<u_char*>(&value);
 
-    if (pos + sizeof(T) >= data.size()) puts("this items.dat is unsupported");
+    if (pos + sizeof(T) > data.size()) // @note bail instead of reading past the buffer (OOB)
+    {
+        puts("this items.dat is unsupported (truncated)");
+        value = T{};
+        return;
+    }
     for (std::size_t i = 0ull; i < sizeof(T); ++i) 
     {
         i8[i] = data[pos + i];
@@ -44,7 +52,16 @@ void data_modify(std::vector<u_char> &data, const u_int &pos, const T &value) no
 
 void decode_items()
 {
-    const u_int size = std::filesystem::file_size("items.dat");
+    // @note fail fast on a missing/empty/unreadable items.dat instead of throwing an
+    // uncaught std::filesystem_error out of main() (which terminates the process).
+    std::error_code ec;
+    const std::uintmax_t file_bytes = std::filesystem::file_size("items.dat", ec);
+    if (ec || file_bytes == 0)
+    {
+        fprintf(stderr, "cannot read items.dat: %s\n", ec ? ec.message().c_str() : "file is empty");
+        std::_Exit(EXIT_FAILURE);
+    }
+    const u_int size = static_cast<u_int>(file_bytes);
     im_data = compress_state(::state{
         .type = packet::SEND_ITEM_DATABASE_DATA,
         .peer_state = peer_state::S_EXTENDED,
@@ -53,8 +70,18 @@ void decode_items()
     u_int pos = im_data.size(); // @note sizeof(::state)
     im_data.resize(pos + size); // @note resize to fit binary data
     
-    std::ifstream("items.dat", std::ios::binary)
-        .read((char*)&im_data[pos], size); // @note the binary data···
+    std::ifstream file("items.dat", std::ios::binary);
+    if (!file.is_open())
+    {
+        fprintf(stderr, "cannot open items.dat\n");
+        std::_Exit(EXIT_FAILURE);
+    }
+    file.read((char*)&im_data[pos], size); // @note the binary data···
+    if (static_cast<u_int>(file.gcount()) != size)
+    {
+        fprintf(stderr, "items.dat: short read (expected %u bytes)\n", size);
+        std::_Exit(EXIT_FAILURE);
+    }
 
     u_short version{};
     shift_pos(im_data, pos, version);
@@ -74,8 +101,10 @@ void decode_items()
         shift_pos(im_data, pos, item.type);
         pos += sizeof(u_char);
 
+        if (pos + sizeof(short) > im_data.size()) { puts("items.dat: truncated name length"); std::_Exit(EXIT_FAILURE); }
         short len = *(reinterpret_cast<short*>(&im_data[pos]));
         pos += sizeof(short);
+        if (len < 0 || pos + static_cast<u_int>(len) > im_data.size()) { puts("items.dat: bad name length"); std::_Exit(EXIT_FAILURE); }
         item.raw_name.resize(len);
         for (short i = 0; i < len; ++i) 
             item.raw_name[i] = im_data[pos] ^ token[(i + item.id) % token.length()], 
