@@ -139,6 +139,7 @@ public:
     signed gems{0};
     signed piggy_gems{0}; // @note banked gems (Life Goals / quests / gem pickup); capped at piggy_cap()
     signed piggy_level{0}; // @note completed piggy collections; each one raises the bank target
+    signed world_lock_bank{0}; // @note WL-equivalent units in World Lock Bank UI
     static constexpr int PIGGY_CAP = 1'500'000;
     /*
     * @brief current bank target: 1.5M, then 3M, 4.5M, ... (+1.5M per collection).

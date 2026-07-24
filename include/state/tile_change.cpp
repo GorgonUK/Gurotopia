@@ -130,24 +130,94 @@ void tile_change(ENetEvent& event, state state)
                     send_particle_effect(event, state.punch.by_32(), {color, 0x61});
                 }
             }
+            // @note first punch on idle casino tiles activates only (no HP); later punches crack.
+            bool casino_broke{};
+            auto send_tile_damage_cue = [&](state cue)
+            {
+                cue.type = packet::TILE_APPLY_DAMAGE;
+                cue.uid = 0;
+                cue.id = 0;
+                cue.netid = pPeer->netid;
+                state_visuals(*event.peer, std::move(cue));
+            };
+            auto punch_casino = [&](bool activate_only)
+            {
+                world->mark_dirty();
+                send_tile_damage_cue(state);
+                if (activate_only) return false; // spin only
+                tile_apply_damage(event, state, block, apply_damage_value);
+                if (block.hits[0] < item.hits) return false;
+                block.fg = 0;
+                block.hits[0] = 0;
+                block.tick = 0;
+                return true; // broken — shared cleanup below
+            };
             switch (item.id)
             {
+                case 756: // @note Slot Machine
+                {
+                    const bool activate_only = (block.tick == 0);
+                    if (activate_only) block.tick = 1;
+
+                    const bool win = (ransuu[{1, 8}] == 1); // ~1/8 like the capture sample
+                    const std::string message = std::format(
+                        "`7[```{}{}`` `{}```7]``",
+                        pPeer->prefix, pPeer->growid,
+                        win ? "2wins at slots!" : "4loses at slots."
+                    );
+                    const char *sfx = win ? "audio/slot_win.wav" : "audio/slot_lose.wav";
+                    peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [pPeer, message, sfx](ENetPeer& peer)
+                    {
+                        send_varlist(&peer, { "OnTalkBubble", pPeer->netid, message, 0u });
+                        on::ConsoleMessage(&peer, message);
+                        send_varlist(&peer, { "OnPlayPositioned", sfx }, pPeer->netid, 2000);
+                    });
+                    if (win)
+                    {
+                        state_visuals(*event.peer, ::state{
+                            .type = packet::SEND_PARTICLE_EFFECT,
+                            .netid = 29,
+                            .id = 2000,
+                            .pos = state.punch.by_32(),
+                            .speed = {0.f, 29.f}
+                        });
+                    }
+                    casino_broke = punch_casino(activate_only);
+                    if (!casino_broke) return;
+                    break;
+                }
                 case 758: // @note Roulette Wheel
                 {
-                    const u_char number = ransuu[{0, 36}];
-                    const char color = (number == 0) ? '2' : (ransuu[{0, 3}] < 2) ? 'b' : '4';
-                    const std::string message = std::format("[`{}{}`` spun the wheel and got `{}{}``!]", pPeer->prefix, pPeer->growid, color, number);
-                    peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [&event, &pPeer, message](ENetPeer& peer)
+                    const bool activate_only = (block.tick == 0);
+                    if (activate_only) block.tick = 1;
+
+                    const u_char number = static_cast<u_char>(ransuu[{0, 36}]);
+                    static constexpr int reds[]{
+                        1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36
+                    };
+                    const char color = (number == 0) ? '2'
+                        : (std::ranges::find(reds, static_cast<int>(number)) != std::end(reds)) ? '4' : 'b';
+                    const std::string message = std::format(
+                        "`7[```{}{}`` spun the wheel and got `{}{}``!`7]``",
+                        pPeer->prefix, pPeer->growid, color, number
+                    );
+                    peers(pPeer->recent_worlds.back(), PEER_SAME_WORLD, [pPeer, message](ENetPeer& peer)
                     {
-                        send_varlist(event.peer, { "OnTalkBubble", pPeer->netid, message }, -1, 2000);
-                        on::ConsoleMessage(event.peer, message, 2000);
+                        send_varlist(&peer, { "OnTalkBubble", pPeer->netid, message, 0u });
+                        on::ConsoleMessage(&peer, message);
                     });
+                    casino_broke = punch_casino(activate_only);
+                    if (!casino_broke) return;
                     break;
                 }
             }
             switch (item.type)
             {
-                case type::STRONG: throw std::runtime_error("It's too strong to break.");
+                case type::STRONG:
+                {
+                    send_action(*event.peer, "play_sfx", "file|audio/cant_place_tile.wav\ndelayMS|0\n");
+                    throw std::runtime_error("It's too strong to break.");
+                }
                 case type::MAIN_DOOR: throw std::runtime_error("(stand over and punch to use)");
                 case type::LOCK:
                 {
@@ -279,11 +349,14 @@ void tile_change(ENetEvent& event, state state)
                     break;
                 }
             }
-            tile_apply_damage(event, std::move(state), block, apply_damage_value);
+            if (!casino_broke)
+            {
+                tile_apply_damage(event, std::move(state), block, apply_damage_value);
 
-            if (block.hits[0] >= item.hits) block.fg = 0, block.hits[0] = 0;
-            else if (block.hits[1] >= item.hits) block.bg = 0, block.hits[1] = 0;
-            else return;
+                if (block.hits[0] >= item.hits) block.fg = 0, block.hits[0] = 0;
+                else if (block.hits[1] >= item.hits) block.bg = 0, block.hits[1] = 0;
+                else return;
+            }
             
             /* @todo update these changes with tile_update() */
             block.label = "";
@@ -404,16 +477,8 @@ void tile_change(ENetEvent& event, state state)
             else // @note normal break (drop gem, seed, block & give XP)
             {
                 if (item.type != type::SEED)
-                { /* gem drop */
-                    /* if greater than 1, assume it's a farmable.*/
-                    u_char rarity_to_gem =
-                        (item.rarity >= 87) ? 22 : 
-                        (item.rarity >= 68) ? 18 : 
-                        (item.rarity >= 53) ? 14 : 
-                        (item.rarity >= 41) ? 11 : 
-                        (item.rarity >= 36) ? 10 :
-                        (item.rarity >= 32) ? 9 :
-                        (item.rarity >= 24) ? 5 : 1;
+                { /* gem drop — official max = floor(rarity/4)+1 (same curve as recycle) */
+                    const int rarity_to_gem = static_cast<int>(item.rarity / 4) + 1;
 
                     if (!ransuu[{0, (rarity_to_gem > 1) ? 1 : 4}]) // @note double chances if farmable.
                     {

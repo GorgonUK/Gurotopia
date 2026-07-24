@@ -29,6 +29,8 @@
 
 #include "quit.hpp"
 
+#include "worldlock_storage.hpp"
+
 #include "__action.hpp"
 
 std::unordered_map<std::string, std::function<void(ENetEvent&, const std::string&)>> action_pool
@@ -63,6 +65,8 @@ std::unordered_map<std::string, std::function<void(ENetEvent&, const std::string
     {"action|wardrobe_save_ui", &action::wardrobe_save_ui},
     {"action|wardrobe_unequip_all", &action::wardrobe_unequip_all},
     {"action|wardrobe_load_ui", &action::wardrobe_load_ui},
+    {"action|worldlock_storage_getpage", &action::worldlock_storage_getpage},
+    {"action|worldlock_storage_modify_amount", &action::worldlock_storage_modify_amount},
 
     {"action|quit", &action::quit}
 };

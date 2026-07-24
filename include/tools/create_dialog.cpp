@@ -139,6 +139,26 @@ create_dialog& create_dialog::add_image_button(
     ));
     return *this;
 }
+create_dialog& create_dialog::add_url_button(std::string btn_id, std::string label, std::string flags, std::string link)
+{
+    _d.append(std::format("add_url_button|{}|{}|{}|{}||\n", btn_id, label, flags, link));
+    return *this;
+}
+create_dialog& create_dialog::add_url_button(
+    std::string btn_id, std::string label, std::string flags, std::string link,
+    std::string confirm, std::string a, std::string b
+)
+{
+    _d.append(std::format(
+        "add_url_button|{}|{}|{}|{}|{}|{}|{}|\n", btn_id, label, flags, link, confirm, a, b
+    ));
+    return *this;
+}
+create_dialog& create_dialog::set_survey_enabled(bool enabled)
+{
+    _d.append(std::format("set_survey_enabled|{}|\n", enabled ? 1 : 0));
+    return *this;
+}
 create_dialog& create_dialog::add_custom_button(std::string btn_id, std::string image)
 {
     _d.append(std::format("add_custom_button|{}|{}|\n", btn_id, image));

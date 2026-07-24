@@ -34,6 +34,12 @@ public:
         std::string btn_id, std::string image, std::string layout, std::string link,
         std::string target, std::string offset
     );
+    create_dialog& add_url_button(std::string btn_id, std::string label, std::string flags, std::string link);
+    create_dialog& add_url_button(
+        std::string btn_id, std::string label, std::string flags, std::string link,
+        std::string confirm, std::string a = "0", std::string b = "0"
+    );
+    create_dialog& set_survey_enabled(bool enabled);
     create_dialog& add_custom_button(std::string btn_id, std::string image);
     create_dialog& add_custom_label(std::string label, std::string pos);
     create_dialog& add_custom_break();

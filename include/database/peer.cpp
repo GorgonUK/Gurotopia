@@ -144,7 +144,8 @@ bool peer::mysql_load_progress()
     ::hStmt hStmt{
         "SELECT gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
         "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest, "
-        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds, piggy_level, home_world "
+        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds, piggy_level, home_world, "
+        "world_lock_bank "
         "FROM peer_state WHERE uid = ? LIMIT 1"
     };
 
@@ -158,6 +159,7 @@ bool peer::mysql_load_progress()
     signed gems = 0;
     signed piggy_gems = 0;
     signed piggy_level = 0;
+    signed world_lock_bank = 0;
     long long playtime_seconds = 0;
     unsigned level = 1, xp = 0, slot_size = 16;
     unsigned role = 0, skin_color = 2527912447u, hair_color = 4278255615u;
@@ -177,7 +179,7 @@ bool peer::mysql_load_progress()
     fav_blob.resize(512);
     notebook_blob.resize(2048);
 
-    MYSQL_BIND results[24]{};
+    MYSQL_BIND results[25]{};
     results[0]  = make_bind_out(gems);
     results[1]  = make_bind_out(level);
     results[2]  = make_bind_out(xp);
@@ -204,6 +206,7 @@ bool peer::mysql_load_progress()
     results[22] = make_bind_out(piggy_level);
     results[23] = make_bind_out(home_world);
     results[23].length = &home_world_len;
+    results[24] = make_bind_out(world_lock_bank);
 
     if (mysql_stmt_bind_result(hStmt.pStmt, results))
     {
@@ -246,6 +249,7 @@ bool peer::mysql_load_progress()
     this->gems = gems;
     this->piggy_level = std::clamp(piggy_level, 0, 1000); // keeps piggy_cap() well inside int range
     this->piggy_gems = std::clamp(piggy_gems, 0, this->piggy_cap());
+    this->world_lock_bank = std::max(0, world_lock_bank);
     this->playtime_seconds = std::max(0ll, playtime_seconds);
     this->level = { static_cast<u_short>(level), static_cast<u_short>(xp) };
     this->slot_size = static_cast<short>(slot_size);
@@ -431,8 +435,9 @@ bool peer::mysql_save_progress()
         "INSERT INTO peer_state "
         "(uid, gems, level, xp, slot_size, clothing, fav, role, skin_color, hair_color, "
         "country, fires_removed, gbc_pity, initialized, recent_worlds, my_worlds, achievements, quest, "
-        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds, piggy_level, home_world) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "online_status, notebook, piggy_gems, wardrobe_preset, playtime_seconds, piggy_level, home_world, "
+        "world_lock_bank) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
         "ON DUPLICATE KEY UPDATE "
         // @note role deliberately NOT updated: the DB is authoritative for it, so a
         // manual `UPDATE peer_state SET role=1` can't be clobbered by a session save.
@@ -444,10 +449,11 @@ bool peer::mysql_save_progress()
         "quest=VALUES(quest), online_status=VALUES(online_status), notebook=VALUES(notebook), "
         "piggy_gems=VALUES(piggy_gems), wardrobe_preset=VALUES(wardrobe_preset), "
         "playtime_seconds=VALUES(playtime_seconds), piggy_level=VALUES(piggy_level), "
-        "home_world=VALUES(home_world)"
+        "home_world=VALUES(home_world), world_lock_bank=VALUES(world_lock_bank)"
     };
 
-    MYSQL_BIND params[25] = {
+    signed world_lock_bank = this->world_lock_bank;
+    MYSQL_BIND params[26] = {
         make_bind_in(this->user_id),
         make_bind_in(gems),
         make_bind_in(level),
@@ -472,7 +478,8 @@ bool peer::mysql_save_progress()
         make_bind_in_blob(wardrobe_blob),
         make_bind_in(this->playtime_seconds),
         make_bind_in(piggy_level),
-        make_bind_in(this->home_world)
+        make_bind_in(this->home_world),
+        make_bind_in(world_lock_bank)
     };
 
     if (mysql_stmt_bind_param(upsert.pStmt, params) || mysql_stmt_execute(upsert.pStmt))

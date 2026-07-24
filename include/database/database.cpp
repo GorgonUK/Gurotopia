@@ -97,6 +97,9 @@ void create_table_if_not_exist()
     // migration: home world name for action|gohomeworld / /sethome
     run_query("ALTER TABLE peer_state ADD COLUMN home_world VARCHAR(32) NOT NULL DEFAULT ''", /*silent_dup=*/true);
 
+    // migration: World Lock Bank balance (WL-equivalent units)
+    run_query("ALTER TABLE peer_state ADD COLUMN world_lock_bank INT NOT NULL DEFAULT 0", /*silent_dup=*/true);
+
     run_query(R"(
         CREATE TABLE IF NOT EXISTS peer_inventory (
             uid INT NOT NULL,

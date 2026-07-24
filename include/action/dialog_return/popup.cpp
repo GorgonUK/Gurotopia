@@ -162,6 +162,10 @@ void popup(ENetEvent& event, const ::hPipe &hPipe)
     {
         send_varlist(event.peer, { "OnDialogRequestRML", "show_wardrobe_main_ui" });
     }
+    else if (hPipe["buttonClicked"] == "open_worldlock_storage")
+    {
+        send_varlist(event.peer, { "OnDialogRequestRML", "show_world_lock_storage" });
+    }
     else if (hPipe["buttonClicked"] == "pets")
     {
         send_petwrench_tab(event, 0);
