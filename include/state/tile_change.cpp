@@ -222,8 +222,11 @@ void tile_change(ENetEvent& event, state state)
                     }
                     else
                     {
-                        // @note not ready yet — refresh the growth_speed countdown, don't break early
+                        // @note not ready yet — punch sound/visual + refresh countdown; don't chip/harvest
                         send_tile_update(event, state, block, *world);
+                        const u_char saved_hits = block.hits[0];
+                        tile_apply_damage(event, std::move(state), block, apply_damage_value);
+                        block.hits[0] = saved_hits;
                         return;
                     }
                     break;
@@ -284,6 +287,7 @@ void tile_change(ENetEvent& event, state state)
             
             /* @todo update these changes with tile_update() */
             block.label = "";
+            block.state[0] &= ~S_SPLICED;
             block.state[2] = 0x00; // @note reset tile direction
             block.state[3] &= ~S_VANISH; // @note remove paint
 
@@ -818,27 +822,72 @@ void tile_change(ENetEvent& event, state state)
                     }
                     case type::SEED:
                     {
-                        for (::item &item : items)
+                        if (item.type != type::SEED)
+                            break;
+
+                        const ::item &tree = id_to_item(block.fg);
+
+                        if (block_elapsed_seconds(block.tick) >= tree.tick)
                         {
-                            if ((item.splice[0] == state.id && item.splice[1] == block.fg) ||
-                                (item.splice[1] == state.id && item.splice[0] == block.fg) /* allow reverse splice combo */)
+                            send_varlist(event.peer, {
+                                "OnTalkBubble",
+                                pPeer->netid,
+                                "This tree is already fully grown.",
+                                0u,
+                                1u
+                            });
+                            break;
+                        }
+
+                        if (block.state[0] & S_SPLICED)
+                        {
+                            send_varlist(event.peer, {
+                                "OnTalkBubble",
+                                pPeer->netid,
+                                "It would be too dangerous to try to mix three seeds.",
+                                0u,
+                                1u
+                            });
+                            break;
+                        }
+
+                        bool spliced{};
+                        for (::item &recipe : items)
+                        {
+                            if ((recipe.splice[0] == state.id && recipe.splice[1] == block.fg) ||
+                                (recipe.splice[1] == state.id && recipe.splice[0] == block.fg) /* allow reverse splice combo */)
                             {
-                                auto splice0 = std::ranges::find(items, item.splice[0], &::item::id);
-                                auto splice1 = std::ranges::find(items, item.splice[1], &::item::id);
+                                auto splice0 = std::ranges::find(items, recipe.splice[0], &::item::id);
+                                auto splice1 = std::ranges::find(items, recipe.splice[1], &::item::id);
 
                                 send_varlist(event.peer, {
-                                    "OnTalkBubble", 
-                                    pPeer->netid, 
-                                    std::format("`w{}`` and `w{}`` have been spliced to make a `${} Tree``!", 
-                                        splice0->raw_name, splice1->raw_name, item.raw_name.substr(0, item.raw_name.length()-5/* seed*/)), // @todo this is hardcoded
+                                    "OnTalkBubble",
+                                    pPeer->netid,
+                                    std::format("`w{}`` and `w{}`` have been spliced to make a `${} Tree``!",
+                                        splice0->raw_name, splice1->raw_name, recipe.raw_name.substr(0, recipe.raw_name.length()-5/* seed*/)), // @todo this is hardcoded
                                     0u,
                                     1u
                                 });
-                                block.tick = growth_planted_tick(item.tick);
-                                block.fg = item.id;
+                                block.tick = growth_planted_tick(recipe.tick);
+                                block.fg = recipe.id;
+                                block.state[0] |= S_SPLICED;
+                                modify_item_inventory(event, ::slot(item.id, -1));
+                                world->mark_dirty();
                                 update_tile = true;
+                                spliced = true;
                                 break;
                             }
+                        }
+                        if (!spliced)
+                        {
+                            send_varlist(event.peer, {
+                                "OnTalkBubble",
+                                pPeer->netid,
+                                std::format("Hmm, it looks like `w{}`` and `w{}`` can't be spliced.",
+                                    item.raw_name, tree.raw_name),
+                                0u,
+                                1u
+                            });
                         }
                         break;
                     }
@@ -914,6 +963,7 @@ void tile_change(ENetEvent& event, state state)
                 }
                 case type::SEED:
                 {
+                    block.state[0] &= ~S_SPLICED;
                     block.state[2] |= 0x11;
                     block.tick = growth_planted_tick(item.tick);
                     break;

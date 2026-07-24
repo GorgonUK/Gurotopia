@@ -6,6 +6,12 @@
 
 class peer;
 
+/* server-only tile flags (state[0]; not sent in the client map blob) */
+enum wstate1 : u_char
+{
+    S_SPLICED = 0x01 // tree already received one splice this growth
+};
+
 enum wstate3 : u_char
 {
     S_RIGHT =  0x00,
