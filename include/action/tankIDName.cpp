@@ -33,7 +33,7 @@ void action::tankIDName(ENetEvent& event, const std::string& header)
     ::peer *pPeer = static_cast<::peer*>(event.peer->data);
 
     std::vector<std::string> pipes = readch(header, '|');
-    if (pipes.empty() || pipes.size() < 41ull) enet_peer_disconnect_later(event.peer, 0);
+    if (pipes.empty() || pipes.size() < 41ull) { enet_peer_disconnect_later(event.peer, 0); return; } // @note stop processing malformed login packets
 
     // @note capture before mysql_load_progress — that overwrites peer fields from DB
     // (including an empty country), which used to wipe the flag the client just sent.

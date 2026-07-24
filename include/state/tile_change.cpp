@@ -44,6 +44,8 @@ void tile_change(ENetEvent& event, state state)
         auto world = std::ranges::find(worlds, pPeer->recent_worlds.back(), &::world::name);
         if (world == worlds.end()) return;
 
+        if (!in_bounds(state.punch)) return; // @note client-supplied punch coords must be validated before indexing blocks
+
         ::block &block = world->blocks[cord(state.punch.x, state.punch.y)];
 
         // @note before the empty-tile bail-out: punching bare water (fg/bg 0) must still reel / cast
@@ -796,7 +798,7 @@ void tile_change(ENetEvent& event, state state)
             if (block.fg != 0) // @note placing something ontop of exisitng block
             {
                 bool update_tile{};
-                switch (items[world->blocks[cord(state.punch.x, state.punch.y)].fg].type)
+                switch (id_to_item(world->blocks[cord(state.punch.x, state.punch.y)].fg).type)
                 {
                     case type::DISPLAY_BLOCK:
                     {
