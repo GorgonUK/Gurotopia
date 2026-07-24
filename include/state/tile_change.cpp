@@ -132,7 +132,7 @@ void tile_change(ENetEvent& event, state state)
             }
             // @note first punch on idle casino tiles activates only (no HP); later punches crack.
             bool casino_broke{};
-            auto send_tile_damage_cue = [&](state cue)
+            auto send_tile_damage_cue = [&](::state cue)
             {
                 cue.type = packet::TILE_APPLY_DAMAGE;
                 cue.uid = 0;
