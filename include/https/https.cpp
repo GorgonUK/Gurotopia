@@ -15,6 +15,7 @@
     #include <netinet/in.h>
     #include <netinet/tcp.h> // @note TCP_DEFER_ACCEPT
     #include <sys/socket.h>
+    #include <sys/time.h>
 
     #define SOCKET int
     #define INVALID_SOCKET	(SOCKET)(~0)
@@ -126,13 +127,27 @@ void https::listener()
         /* https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept */
         SOCKET fd = accept(socket, reinterpret_cast<sockaddr*>(&addr), &addrlen);
         if (fd == INVALID_SOCKET) continue;
-        
+
+        /* Public IPs get constant TLS scanners. This listener is single-threaded, so a
+           stalled SSL_accept/SSL_read used to wedge server_data.php for every client.
+           Short timeouts make bad peers fail fast and free the accept loop. */
+#ifdef _WIN32
+        DWORD timeout_ms = 3000;
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout_ms, sizeof(timeout_ms));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout_ms, sizeof(timeout_ms));
+#else
+        timeval timeout{.tv_sec = 3, .tv_usec = 0};
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+#endif
+
         SSL *ssl = SSL_new(ctx);
         if (!ssl) {
             cross_close(fd);
             continue;
         }
         if (SSL_set_fd(ssl, fd) != 1) {
+            SSL_free(ssl);
             cross_close(fd);
             continue;
         }
